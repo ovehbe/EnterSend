@@ -120,6 +120,13 @@
     <string name="action_dont_ask">Don\'t ask again for this app</string>
     <string name="action_enable_default_enter">Enable with default Enter</string>
     <string name="action_ask_again">Ask again on open</string>
+    <string name="diagnostics_open">Diagnostics</string>
+    <string name="diagnostics_title">Prompt log</string>
+    <string name="diagnostics_blurb">Last ~100 new-app prompt decisions. Copy or share this if a teach prompt is missing.</string>
+    <string name="diagnostics_copy">Copy</string>
+    <string name="diagnostics_share">Share</string>
+    <string name="diagnostics_clear">Clear</string>
+    <string name="diagnostics_copied">Copied</string>
 
     <!-- Service state notification -->
     <string name="channel_service">EnterSend status</string>

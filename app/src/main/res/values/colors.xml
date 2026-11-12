@@ -26,8 +26,10 @@
     <color name="md_theme_outline">#707973</color>
     <color name="md_theme_outline_variant">#C0C9C1</color>
 
-    <!-- Keyboard focus must stay high-contrast on small Q25 screens. -->
+    <!-- Unused legacy; keyboard focus uses focus_state_layer. -->
     <color name="focus">#FFFF9800</color>
+    <!-- ~12% on-surface Material focus state layer (no thick outline). -->
+    <color name="focus_state_layer">#1F171D19</color>
     <color name="banner_off">#FFB3261E</color>
     <color name="health_none">#FF9E9E9E</color>
     <color name="health_good">#FF2E7D32</color>

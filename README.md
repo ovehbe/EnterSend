@@ -37,20 +37,20 @@ Open EnterSend. The first-run setup has three steps, each with a check mark:
 2. **Press Enter and Shift+Enter** in the focusable box.
 3. **Try it**: type in the test box and press Enter (it is sent) and Shift+Enter (new line).
 
-Everything is reachable with the physical keyboard: arrow keys or Tab move focus (shown by an orange ring),
-Enter presses the focused control.
+Everything is reachable with the physical keyboard: arrow keys or Tab move focus (subtle tint, no thick
+outline), Enter presses the focused control.
 
-## App UI (0.3.0)
+## App UI (0.3.1)
 
 Material 3 shell with light/dark (and dynamic color on Android 12+), built for the Q25’s short
-square screen and hardware keyboard (visible orange focus rings, D-pad / Tab friendly).
+square screen and hardware keyboard (D-pad / Tab friendly focus tint).
 
 Bottom navigation:
 
 1. **Home** — service status, active profile, shortcuts to setup and apps.
 2. **Apps** — searchable list with icons, mode, health; filters for needs-teaching and system apps.
 3. **Profiles** — save / switch / rename / delete full config snapshots (different keyboard heights).
-4. **Settings** — new-app prompts toggle, export/import JSON, open setup, version.
+4. **Settings** — new-app prompts toggle, export/import JSON, open setup, **Diagnostics**, version.
 
 Settings changes still apply to the running accessibility service immediately. Teach overlays keep
 the same behavior; only the visuals were polished.
@@ -58,12 +58,13 @@ the same behavior; only the visuals were polished.
 ### New-app prompts
 
 For every **new open** of a launcher-visible non-system app that is still undecided, EnterSend
-shows a high-importance heads-up notification (Teach / Remind later / Off). If notifications are
-denied or the channel is blocked, a top accessibility overlay banner appears instead. Tapping either
-opens a compact chooser: Teach now, Remind me later (1 h), Enable with default Enter, Off, Don’t ask
-again. Session dedupe prevents spam inside one app visit; leaving and returning asks again until the
-user decides. System apps stay Off and are never prompted. Apps → **Ask again on open** clears
-“don’t ask again”.
+shows a high-importance heads-up notification on channel `teach_prompt_alert` (Teach / Remind later /
+Off). Foreground detection uses application windows / active root — not the event package (IME,
+overlays, and EnterSend’s own banner are ignored). If notifications are denied or the channel is
+blocked, a top accessibility overlay banner appears instead. Tapping either opens a compact chooser.
+Session dedupe prevents spam inside one app visit; leaving and returning asks again until the user
+decides. System apps stay Off and are never prompted. Apps → **Ask again on open** clears “don’t ask
+again”. Settings → **Diagnostics** lists the last ~100 prompt decisions (Copy / Share).
 
 Select an app for: Teach / Re-teach, mode Auto, Learned, Pass-through, Off, Ask again, and Reset.
 System apps are hidden until you check **Show system apps**. Browsers, notes and email apps are

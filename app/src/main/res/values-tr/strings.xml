@@ -120,6 +120,13 @@
     <string name="action_dont_ask">Bu uygulama için bir daha sorma</string>
     <string name="action_enable_default_enter">Varsayılan Enter ile aç</string>
     <string name="action_ask_again">Açılışta yeniden sor</string>
+    <string name="diagnostics_open">Tanılama</string>
+    <string name="diagnostics_title">İstem günlüğü</string>
+    <string name="diagnostics_blurb">Son ~100 yeni uygulama istem kararı. Öğretme bildirimi gelmezse kopyalayıp paylaşın.</string>
+    <string name="diagnostics_copy">Kopyala</string>
+    <string name="diagnostics_share">Paylaş</string>
+    <string name="diagnostics_clear">Temizle</string>
+    <string name="diagnostics_copied">Kopyalandı</string>
 
     <!-- Hizmet durumu bildirimi -->
     <string name="channel_service">EnterSend durumu</string>

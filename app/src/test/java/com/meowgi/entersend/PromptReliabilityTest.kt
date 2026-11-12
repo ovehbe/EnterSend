@@ -11,6 +11,7 @@ import android.view.accessibility.AccessibilityEvent
 import com.meowgi.entersend.core.SystemAppPolicy
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.Mode
+import com.meowgi.entersend.data.PromptDecisionLog
 import com.meowgi.entersend.data.PromptPrefs
 import com.meowgi.entersend.service.EnterSendService
 import com.meowgi.entersend.service.FakePromptBanner
@@ -43,6 +44,7 @@ class PromptReliabilityTest {
         db = memoryDb()
         day = 20_000L
         now = 1_000_000L
+        PromptDecisionLog.resetForTests(context())
         PromptPrefs.setPromptsEnabled(context(), true)
         context().getSharedPreferences("entersend_prompts", 0).edit().clear().apply()
         PromptPrefs.setPromptsEnabled(context(), true)
@@ -50,6 +52,7 @@ class PromptReliabilityTest {
 
     @After fun tearDown() {
         db.close()
+        PromptDecisionLog.resetForTests(context())
         context().getSharedPreferences("entersend_prompts", 0).edit().clear().apply()
     }
 

@@ -45,6 +45,11 @@
             android:label="@string/prompt_title"
             android:theme="@style/Theme.EnterSend.PromptDialog" />
 
+        <activity
+            android:name=".ui.DiagnosticsActivity"
+            android:exported="false"
+            android:label="@string/diagnostics_title" />
+
         <service
             android:name=".service.EnterSendService"
             android:exported="false"

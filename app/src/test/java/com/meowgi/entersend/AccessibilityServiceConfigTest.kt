@@ -45,11 +45,15 @@ class AccessibilityServiceConfigTest {
     @Test fun listensForWindowClicksAndTextAcrossAllPackages() {
         val types = int("accessibilityEventTypes")
         assertTrue(types and AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED != 0)
+        assertTrue(types and AccessibilityEvent.TYPE_WINDOWS_CHANGED != 0)
+        assertTrue(types and AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED != 0)
         assertTrue(types and AccessibilityEvent.TYPE_VIEW_CLICKED != 0)
         assertTrue(types and AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED != 0)
         // No packageNames → every app. Attribute absent ⇒ empty/default.
         val packages = attrs.getAttributeValue(ns, "packageNames")
         assertTrue("packageNames must be unset so all apps are watched, was $packages", packages.isNullOrEmpty())
         assertNotEquals(0, attrs.getAttributeResourceValue(ns, "description", 0))
+        val timeout = attrs.getAttributeIntValue(ns, "notificationTimeout", -1)
+        assertTrue("notificationTimeout should be positive, was $timeout", timeout > 0)
     }
 }

@@ -77,6 +77,9 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.open_setup).setOnClickListener { startActivity(Intent(this, SetupActivity::class.java)) }
         findViewById<View>(R.id.settings_open_setup).setOnClickListener { startActivity(Intent(this, SetupActivity::class.java)) }
+        findViewById<View>(R.id.open_diagnostics).setOnClickListener {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
+        }
         findViewById<View>(R.id.home_goto_apps).setOnClickListener { selectTab(1) }
         findViewById<View>(R.id.status_action).setOnClickListener { ServiceWatch.openAccessibilitySettings(this) }
         findViewById<View>(R.id.profiles_button).setOnClickListener { selectTab(2) }
@@ -131,7 +134,7 @@ class MainActivity : AppCompatActivity() {
             }
             true
         }
-        // Focus rings on bottom-nav items for D-pad.
+        // Subtle focus state layer on bottom-nav items for D-pad / Tab.
         bottomNav.post {
             for (i in 0 until bottomNav.menu.size()) {
                 val itemView = (bottomNav.getChildAt(0) as? ViewGroup)?.getChildAt(i)

@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Toast
 import com.meowgi.entersend.BuildConfig
 import com.meowgi.entersend.EnterSendApp
@@ -15,6 +16,7 @@ import com.meowgi.entersend.ServiceWatch
 import com.meowgi.entersend.core.KeyGate
 import com.meowgi.entersend.core.SystemAppPolicy
 import com.meowgi.entersend.data.CropFiles
+import com.meowgi.entersend.data.PromptDecisionLog
 import java.time.LocalDate
 
 class EnterSendService : AccessibilityService() {
@@ -23,11 +25,15 @@ class EnterSendService : AccessibilityService() {
     private var enter: EnterHandler? = null
     private var device: Device? = null
     private var notifier: NewAppNotifier? = null
+    private var policy: SystemAppPolicy? = null
     private var lastWindowPkg: String? = null
     internal var teach: TeachFlow? = null
         private set
     internal var store: RuleStore? = null
         private set
+
+    /** Test override for window/root resolution. */
+    internal var foregroundProbe: (() -> ForegroundPackage.Resolved?)? = null
 
     override fun onServiceConnected() {
         // Drop any leftover teach overlay from a previous connection.
@@ -35,6 +41,7 @@ class EnterSendService : AccessibilityService() {
         serviceInfo = serviceInfo.apply {
             eventTypes = eventTypes or
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
                 AccessibilityEvent.TYPE_VIEW_CLICKED or
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
@@ -58,6 +65,8 @@ class EnterSendService : AccessibilityService() {
         )
         instance = this
         ServiceWatch.updateNotice(this, running = true)
+        // Ensure HIGH channel exists and legacy DEFAULT is gone as soon as a11y connects.
+        notifier?.ensureChannel()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -88,6 +97,7 @@ class EnterSendService : AccessibilityService() {
         teach?.forceClose()
         this.device = device
         this.store = store
+        this.policy = policy
         val prompt = notifier ?: NewAppNotifier(
             this, store, today, policy, banner = banner,
         )
@@ -95,7 +105,7 @@ class EnterSendService : AccessibilityService() {
         // Prompt once the rule finishes loading — avoids the race where WINDOW_STATE fires
         // while RuleStore.refresh is still in flight and get() returns null.
         store.setOnLoaded { pkg, state ->
-            if (pkg == lastWindowPkg) prompt.onAppSeen(pkg, state.rule)
+            if (pkg == lastWindowPkg) prompt.onAppSeen(pkg, state.rule, source = "rule-loaded")
         }
         val teach = TeachFlow(device, store, overlay, main, today, ::versionOf) { getString(it) }
         this.teach = teach
@@ -130,28 +140,122 @@ class EnterSendService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        val pkg = event.packageName?.toString() ?: return
         when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                val previous = lastWindowPkg
-                if (previous != null && previous != pkg) {
-                    notifier?.onPackageLeft(previous)
-                }
-                lastWindowPkg = pkg
-                // Loads (or reloads) the rule; NewAppNotifier runs from onLoaded + below.
-                store?.onForeground(pkg)
-                store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule) }
-            }
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED,
+            -> onForegroundEvent(event)
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
-            -> teach?.onTextChanged(pkg)
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> teach?.onContentChanged(pkg)
+            -> {
+                val pkg = event.packageName?.toString() ?: return
+                teach?.onTextChanged(pkg)
+            }
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                val pkg = event.packageName?.toString() ?: return
+                teach?.onContentChanged(pkg)
+            }
             AccessibilityEvent.TYPE_VIEW_CLICKED -> if (teach?.isTeaching == true) {
+                val pkg = event.packageName?.toString() ?: return
                 val source = event.source
                 if (source != null) teach?.onClicked(pkg, A11yDevice.clickedSnap(source))
                 else teach?.onMissedClick()
             }
         }
+    }
+
+    private fun onForegroundEvent(event: AccessibilityEvent) {
+        val eventPkg = event.packageName?.toString()
+        val resolved = resolveForeground(eventPkg) ?: run {
+            // IME / overlay / our banner — keep previous app; log noise for diagnostics.
+            if (!eventPkg.isNullOrBlank()) {
+                PromptDecisionLog.get(this).record(
+                    eventPkg,
+                    eventSource(event.eventType) + "/ignored",
+                    "skipped:noise-window",
+                )
+            }
+            return
+        }
+        val pkg = resolved.packageName
+        val previous = lastWindowPkg
+        if (previous != null && previous != pkg) {
+            notifier?.onPackageLeft(previous)
+        }
+        lastWindowPkg = pkg
+        store?.onForeground(pkg)
+        store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule, source = resolved.source) }
+    }
+
+    private fun resolveForeground(eventPkg: String?): ForegroundPackage.Resolved? {
+        // When a test probe is installed, its null means "noise / keep previous" — do not fall through.
+        foregroundProbe?.let { return it() }
+        val pol = policy ?: SystemAppPolicy(this)
+        // IME / SystemUI are not the app the user opened — ignore them as foreground.
+        val isNoise: (String) -> Boolean = { p ->
+            pol.isSystemUi(p) ||
+                p in pol.enabledImePackages() ||
+                "inputmethod" in p ||
+                p.endsWith(".ime")
+        }
+        val windows = windowHints()
+        val rootPkg = try {
+            rootInActiveWindow?.packageName?.toString()
+        } catch (_: Exception) {
+            null
+        }
+        val base = ForegroundPackage.resolve(
+            ownPackage = packageName,
+            eventPackage = eventPkg,
+            rootPackage = rootPkg,
+            windows = windows,
+            isNoise = isNoise,
+        ) ?: return null
+        val source = when (base.source) {
+            "windows" -> "windows"
+            "root" -> "root"
+            else -> "event"
+        }
+        return ForegroundPackage.Resolved(base.packageName, source)
+    }
+
+    private fun windowHints(): List<ForegroundPackage.WindowHint> {
+        val list = try {
+            windows
+        } catch (_: Exception) {
+            null
+        } ?: return emptyList()
+        return list.mapNotNull { w ->
+            val root = try {
+                w.root
+            } catch (_: Exception) {
+                null
+            } ?: return@mapNotNull null
+            val pkg = try {
+                root.packageName?.toString()
+            } catch (_: Exception) {
+                null
+            } ?: return@mapNotNull null
+            val type = try {
+                w.type
+            } catch (_: Exception) {
+                AccessibilityWindowInfo.TYPE_APPLICATION
+            }
+            val layer = try {
+                w.layer
+            } catch (_: Exception) {
+                0
+            }
+            try {
+                root.recycle()
+            } catch (_: Exception) {
+            }
+            ForegroundPackage.WindowHint(pkg, type, layer)
+        }
+    }
+
+    private fun eventSource(type: Int): String = when (type) {
+        AccessibilityEvent.TYPE_WINDOWS_CHANGED -> "windows-changed"
+        else -> "window-state"
     }
 
     override fun onInterrupt() = Unit

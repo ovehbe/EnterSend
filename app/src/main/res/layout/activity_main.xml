@@ -391,6 +391,14 @@
                     android:foreground="@drawable/focus_ring"
                     android:text="@string/open_setup" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/open_diagnostics"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/diagnostics_open" />
+
                 <!-- Hidden compatibility hooks for older profile menu entry points. -->
                 <View
                     android:id="@+id/profiles_button"
