@@ -152,6 +152,23 @@ class A11yDevice(private val service: AccessibilityService) : Device {
             return text
         }
 
+        /** The clicked node, with its parent attached so [NodeSnap.classPath] works. */
+        fun clickedSnap(n: AccessibilityNodeInfo): NodeSnap {
+            val self = NodeSnap(
+                viewId = n.viewIdResourceName,
+                text = n.text?.toString(),
+                desc = n.contentDescription?.toString(),
+                className = n.className?.toString(),
+                clickable = n.isClickable,
+                enabled = n.isEnabled,
+                editable = n.isEditable,
+                bounds = boundsOf(n),
+                ref = n,
+            )
+            n.parent?.let { p -> NodeSnap(className = p.className?.toString(), bounds = boundsOf(p), children = listOf(self)) }
+            return self
+        }
+
         fun boundsOf(n: AccessibilityNodeInfo): Box {
             val r = Rect()
             n.getBoundsInScreen(r)

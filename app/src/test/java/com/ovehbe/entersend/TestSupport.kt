@@ -11,6 +11,10 @@ import com.ovehbe.entersend.core.NodeSnap
 import com.ovehbe.entersend.core.Pixels
 import com.ovehbe.entersend.core.WindowState
 import com.ovehbe.entersend.data.AppDb
+import com.ovehbe.entersend.data.Crops
+import com.ovehbe.entersend.service.Card
+import com.ovehbe.entersend.service.Choice
+import com.ovehbe.entersend.service.Overlay
 import com.ovehbe.entersend.service.Device
 import com.ovehbe.entersend.service.EnterSendService
 import com.ovehbe.entersend.service.RuleStore
@@ -112,9 +116,45 @@ fun context(): Context = ApplicationProvider.getApplicationContext()
 
 fun memoryDb(): AppDb = Room.inMemoryDatabaseBuilder(context(), AppDb::class.java).allowMainThreadQueries().build()
 
-fun service(device: Device, db: AppDb, crops: Map<String, Pixels> = emptyMap()): EnterSendService =
+class FakeCrops(initial: Map<String, Pixels> = emptyMap()) : Crops {
+    val files = initial.toMutableMap()
+    override fun load(path: String) = files[path]
+    override fun save(pkg: String, pixels: Pixels) = "/crops/$pkg-${files.size}.png".also { files[it] = pixels }
+    override fun delete(path: String) {
+        files.remove(path)
+    }
+}
+
+class FakeOverlay : Overlay {
+    var card: Card? = null
+    val shown = mutableListOf<Card>()
+    private var onChoice: ((Choice) -> Unit)? = null
+
+    override fun show(card: Card, onChoice: (Choice) -> Unit) {
+        this.card = card
+        this.onChoice = onChoice
+        shown += card
+    }
+
+    override fun hide() {
+        card = null
+        onChoice = null
+    }
+
+    /** Simulates a touch on one of the card's buttons. */
+    fun tap(choice: Choice) = onChoice!!(choice)
+}
+
+fun service(
+    device: Device,
+    db: AppDb,
+    crops: Crops = FakeCrops(),
+    overlay: Overlay = FakeOverlay(),
+    today: () -> Long = { 20_000L },
+    io: Executor = direct,
+): EnterSendService =
     Robolectric.setupService(EnterSendService::class.java).apply {
-        attach(device, RuleStore(db.rules(), direct, direct) { crops[it] })
+        attach(device, RuleStore(db.rules(), io, direct, crops), overlay, today)
     }
 
 fun key(

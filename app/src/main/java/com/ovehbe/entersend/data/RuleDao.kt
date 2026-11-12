@@ -25,6 +25,12 @@ interface RuleDao {
     @Query("UPDATE app_rules SET failureCount = failureCount + 1 WHERE packageName = :pkg")
     fun addFailure(pkg: String)
 
+    @Query("UPDATE app_rules SET lastAskedDay = :day WHERE packageName = :pkg")
+    fun setLastAsked(pkg: String, day: Long)
+
+    @Query("UPDATE app_rules SET teachDeclined = 1 WHERE packageName = :pkg")
+    fun setDeclined(pkg: String)
+
     @Query("DELETE FROM app_rules WHERE packageName = :pkg")
     fun delete(pkg: String)
 }

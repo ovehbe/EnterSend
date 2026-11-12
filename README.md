@@ -52,6 +52,28 @@ On the Q25 every physical press arrives twice: the real event and a zero-duratio
 about 15 ms later. `KeyGate` gives the copy the same answer as the real press (consumed or passed),
 so a press acts at most once. A deviceId -1 Enter with no real press nearby is passed through untouched.
 
+## Teaching an app
+
+When Enter finds no working send rule in a chat field, a small card appears at the bottom:
+"Didn't find send. Teach this app?" It never takes focus, so typing keeps going to the app.
+It appears at most once per app per day.
+
+| Key        | Ask card                        | Teaching bar | "Is this the send button?" |
+|------------|---------------------------------|--------------|----------------------------|
+| **Alt+Y**  | yes, start teaching             | –            | yes, save                  |
+| **Alt+N**  | no, never ask again for this app | –           | no, try again              |
+| **Esc**    | close (ask later)               | cancel       | cancel                     |
+| any other key | goes to the app; hides the card (ask later) | goes to the app | goes to the app |
+
+Hold Alt while pressing Y or N. Plain letters are never consumed, so typing "yes", "no", "Y" or "N"
+in the chat always types them. The ask card disappears after 8 s (ask later). A "no" is stored in the
+database and survives reboots. The cards also have touch buttons.
+
+Teaching: a slim bar at the top says "Send a message now". Type a message and tap the app's send button.
+EnterSend records the tapped node (view id, text, content description, class path) and the tap spot with a
+cropped screenshot taken just before the tap, the screen orientation and the app window size, then asks
+"Is this the send button?" with the crop. It saves only on yes; no starts over.
+
 ## Storage
 
 Room database `entersend.db`, schema v1, exported to `app/schemas/`. Every schema change needs a

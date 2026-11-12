@@ -61,4 +61,16 @@ class NodeSnap(
 
 data class WindowState(val orientation: Int, val width: Int, val height: Int)
 
-class Pixels(val width: Int, val height: Int, val argb: IntArray)
+class Pixels(val width: Int, val height: Int, val argb: IntArray) {
+    /** The part of this image inside [box]; null if they don't overlap. */
+    fun crop(box: Box): Pixels? {
+        val l = box.left.coerceIn(0, width)
+        val t = box.top.coerceIn(0, height)
+        val r = box.right.coerceIn(0, width)
+        val b = box.bottom.coerceIn(0, height)
+        if (r <= l || b <= t) return null
+        val out = IntArray((r - l) * (b - t))
+        for (y in t until b) System.arraycopy(argb, y * width + l, out, (y - t) * (r - l), r - l)
+        return Pixels(r - l, b - t, out)
+    }
+}

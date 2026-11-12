@@ -3,4 +3,18 @@
     <string name="app_name">EnterSend</string>
     <string name="a11y_summary">Enter sends, Shift+Enter adds a new line</string>
     <string name="a11y_description">EnterSend reads the focused text field and the buttons next to it so that the physical Enter key can press the send button in chat apps. Shift+Enter inserts a new line. In search bars, address bars, password fields, notes and email, Enter works as usual. Nothing leaves your phone: EnterSend has no internet access.</string>
+
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="later">Later</string>
+    <string name="cancel">Cancel</string>
+    <string name="card_ask_title">Didn\'t find send. Teach this app?</string>
+    <string name="card_reteach_title">Send button not found. Re-teach this app?</string>
+    <string name="card_ask_keys">Alt+Y yes · Alt+N no · Esc later</string>
+    <string name="card_teaching_title">Send a message now</string>
+    <string name="card_teaching_keys">Tap the app\'s send button · Esc cancel</string>
+    <string name="card_confirm_title">Is this the send button?</string>
+    <string name="card_confirm_title_label">Is \"%1$s\" the send button?</string>
+    <string name="card_confirm_keys">Alt+Y yes · Alt+N no, try again · Esc cancel</string>
+    <string name="card_crop_desc">The button you tapped</string>
 </resources>

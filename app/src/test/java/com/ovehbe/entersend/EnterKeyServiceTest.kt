@@ -9,7 +9,6 @@ import com.ovehbe.entersend.data.AppDb
 import com.ovehbe.entersend.data.AppRule
 import com.ovehbe.entersend.data.Mode
 import com.ovehbe.entersend.service.EnterSendService
-import com.ovehbe.entersend.service.RuleStore
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,7 +33,7 @@ class EnterKeyServiceTest {
     @After fun tearDown() = db.close()
 
     private fun start(crops: Map<String, com.ovehbe.entersend.core.Pixels> = emptyMap()): EnterSendService =
-        service(device, db, crops)
+        service(device, db, FakeCrops(crops))
 
     private fun settle() = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(3))
 
@@ -179,10 +178,7 @@ class EnterKeyServiceTest {
     @Test fun ruleStillLoadingPassesThrough() {
         device.field = chatField("hello")
         device.root = window(sendButton())
-        val neverRuns = java.util.concurrent.Executor { }
-        val s = org.robolectric.Robolectric.setupService(EnterSendService::class.java).apply {
-            attach(device, RuleStore(db.rules(), neverRuns, direct) { null })
-        }
+        val s = service(device, db, io = { })
         assertEquals(listOf(false, false), s.press(1000))
         assertTrue(device.clicks.isEmpty())
     }

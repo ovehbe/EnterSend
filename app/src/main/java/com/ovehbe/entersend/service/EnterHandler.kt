@@ -20,6 +20,8 @@ class EnterHandler(
     private val device: Device,
     private val store: RuleStore,
     private val main: Handler,
+    /** Called when a chat field has no working send rule, to offer teaching. */
+    private val offerTeach: (AppRule) -> Unit,
 ) {
     /** Set while a send is waiting for the field to empty; further Enters are swallowed. */
     private var inFlight: Any? = null
@@ -50,6 +52,7 @@ class EnterHandler(
             return true
         }
         if (mode == Mode.LEARNED && rule.hasTapSpot) return tapSpot(field, rule, state.crop)
+        offerTeach(rule)
         return false
     }
 
@@ -60,10 +63,10 @@ class EnterHandler(
      */
     private fun tapSpot(field: Field, rule: AppRule, crop: Pixels?): Boolean {
         val ws = device.windowState(field) ?: return false
-        if (ws.orientation != rule.orientation || ws.width != rule.windowWidth || ws.height != rule.windowHeight) {
+        if (crop == null || ws.orientation != rule.orientation || ws.width != rule.windowWidth || ws.height != rule.windowHeight) {
+            offerTeach(rule)
             return false
         }
-        if (crop == null) return false
         val token = Any()
         inFlight = token
         val rect = Box(rule.cropLeft!!, rule.cropTop!!, rule.cropRight!!, rule.cropBottom!!)
@@ -75,6 +78,7 @@ class EnterHandler(
             } else {
                 inFlight = null
                 device.imeEnter(field)
+                offerTeach(rule)
             }
         }
         return true

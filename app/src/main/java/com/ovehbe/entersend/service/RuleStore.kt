@@ -2,6 +2,7 @@ package com.ovehbe.entersend.service
 
 import com.ovehbe.entersend.core.Pixels
 import com.ovehbe.entersend.data.AppRule
+import com.ovehbe.entersend.data.Crops
 import com.ovehbe.entersend.data.RuleDao
 import java.util.concurrent.Executor
 
@@ -13,7 +14,7 @@ class RuleStore(
     private val dao: RuleDao,
     private val io: Executor,
     private val main: Executor,
-    private val loadCrop: (String) -> Pixels?,
+    private val crops: Crops,
 ) {
     class AppState(val rule: AppRule, val crop: Pixels?)
 
@@ -36,7 +37,7 @@ class RuleStore(
         if (!loading.add(pkg)) return
         io.execute {
             val rule = dao.get(pkg) ?: AppRule(pkg)
-            val crop = rule.cropPath?.let(loadCrop)
+            val crop = rule.cropPath?.let(crops::load)
             main.execute {
                 loading.remove(pkg)
                 loaded[pkg] = AppState(rule, crop)
@@ -45,16 +46,41 @@ class RuleStore(
     }
 
     fun recordResult(pkg: String, success: Boolean) {
-        loaded[pkg]?.let { s ->
-            val r = s.rule
-            loaded[pkg] = AppState(
-                if (success) r.copy(successCount = r.successCount + 1) else r.copy(failureCount = r.failureCount + 1),
-                s.crop,
-            )
-        }
+        update(pkg) { if (success) it.copy(successCount = it.successCount + 1) else it.copy(failureCount = it.failureCount + 1) }
         io.execute {
             dao.ensure(pkg)
             if (success) dao.addSuccess(pkg) else dao.addFailure(pkg)
         }
+    }
+
+    fun markAsked(pkg: String, day: Long) {
+        update(pkg) { it.copy(lastAskedDay = day) }
+        io.execute {
+            dao.ensure(pkg)
+            dao.setLastAsked(pkg, day)
+        }
+    }
+
+    fun decline(pkg: String) {
+        update(pkg) { it.copy(teachDeclined = true) }
+        io.execute {
+            dao.ensure(pkg)
+            dao.setDeclined(pkg)
+        }
+    }
+
+    /** Saves a taught rule; [crop] replaces the old crop file. */
+    fun saveTaught(rule: AppRule, crop: Pixels?) {
+        val pkg = rule.packageName
+        io.execute {
+            dao.get(pkg)?.cropPath?.let(crops::delete)
+            val saved = rule.copy(cropPath = crop?.let { crops.save(pkg, it) })
+            dao.upsert(saved)
+            main.execute { loaded[pkg] = AppState(saved, crop) }
+        }
+    }
+
+    private fun update(pkg: String, change: (AppRule) -> AppRule) {
+        loaded[pkg]?.let { loaded[pkg] = AppState(change(it.rule), it.crop) }
     }
 }

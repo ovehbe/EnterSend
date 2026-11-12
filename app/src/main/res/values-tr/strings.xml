@@ -3,4 +3,18 @@
     <string name="app_name">EnterSend</string>
     <string name="a11y_summary">Enter gönderir, Shift+Enter yeni satır ekler</string>
     <string name="a11y_description">EnterSend, fiziksel Enter tuşunun sohbet uygulamalarında gönder düğmesine basabilmesi için odaktaki metin alanını ve yanındaki düğmeleri okur. Shift+Enter yeni satır ekler. Arama çubuklarında, adres çubuklarında, şifre alanlarında, notlarda ve e-postada Enter her zamanki gibi çalışır. Hiçbir veri telefonunuzdan çıkmaz: EnterSend\'in internet erişimi yoktur.</string>
+
+    <string name="yes">Evet</string>
+    <string name="no">Hayır</string>
+    <string name="later">Sonra</string>
+    <string name="cancel">İptal</string>
+    <string name="card_ask_title">Gönder düğmesi bulunamadı. Bu uygulamayı öğretmek ister misiniz?</string>
+    <string name="card_reteach_title">Gönder düğmesi bulunamadı. Bu uygulamayı yeniden öğretmek ister misiniz?</string>
+    <string name="card_ask_keys">Alt+Y evet · Alt+N hayır · Esc sonra</string>
+    <string name="card_teaching_title">Şimdi bir mesaj gönderin</string>
+    <string name="card_teaching_keys">Uygulamanın gönder düğmesine dokunun · Esc iptal</string>
+    <string name="card_confirm_title">Gönder düğmesi bu mu?</string>
+    <string name="card_confirm_title_label">Gönder düğmesi \"%1$s\" mi?</string>
+    <string name="card_confirm_keys">Alt+Y evet · Alt+N hayır, tekrar dene · Esc iptal</string>
+    <string name="card_crop_desc">Dokunduğunuz düğme</string>
 </resources>
