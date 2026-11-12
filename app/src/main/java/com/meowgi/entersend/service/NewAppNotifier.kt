@@ -16,8 +16,10 @@ import com.meowgi.entersend.data.Mode
 
 /**
  * One "Teach Enter for <app>?" notification per package per day for apps with no rule and no
- * previous answer. Never for pass-through / Off / declined / blocked / system-default-off packages.
- * Does not create DB rows for system defaults — [RuleStore.markAsked] only runs when we actually post.
+ * previous answer. Never for pass-through / Off / declined / blocked / system packages.
+ *
+ * [markAsked] runs only after a successful [post], so a missing notification permission does not
+ * burn the once-per-day slot.
  */
 class NewAppNotifier(
     private val context: Context,
@@ -27,25 +29,33 @@ class NewAppNotifier(
 ) {
     private val nm = context.getSystemService(NotificationManager::class.java)
 
-    fun onAppSeen(pkg: String, rule: AppRule) {
-        if (pkg == context.packageName) return
-        if (pkg in AppLists.NEVER || pkg in AppLists.NATIVE_ENTER) return
-        if (!policy.mayPrompt(pkg)) return
-        if (rule.teachDeclined || rule.isTaught) return
+    /** @return true if a notification was posted. */
+    fun onAppSeen(pkg: String, rule: AppRule): Boolean {
+        if (pkg == context.packageName) return false
+        if (pkg in AppLists.NEVER || pkg in AppLists.NATIVE_ENTER) return false
+        if (!policy.mayPrompt(pkg)) return false
+        if (rule.teachDeclined || rule.isTaught) return false
         val mode = policy.resolveMode(rule)
-        if (mode == Mode.OFF || mode == Mode.PASS_THROUGH) return
-        if (rule.lastAskedDay == today()) return
-
+        if (mode == Mode.OFF || mode == Mode.PASS_THROUGH) return false
+        if (rule.lastAskedDay == today()) return false
+        if (!canPost()) return false
+        if (!post(pkg)) return false
         store.markAsked(pkg, today())
-        post(pkg)
+        return true
     }
 
-    fun post(pkg: String) {
+    fun canPost(): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
-            return // degrade quietly
+            return false
         }
+        return true
+    }
+
+    /** @return true if the notification was delivered to the system. */
+    fun post(pkg: String): Boolean {
+        if (!canPost()) return false
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL, context.getString(R.string.channel_teach), NotificationManager.IMPORTANCE_DEFAULT),
         )
@@ -62,9 +72,11 @@ class NewAppNotifier(
             .addAction(Notification.Action.Builder(null, context.getString(R.string.action_teach), teach).build())
             .addAction(Notification.Action.Builder(null, context.getString(R.string.action_off_for_app), off).build())
             .build()
-        try {
+        return try {
             nm.notify(notificationId(pkg), notification)
+            true
         } catch (_: SecurityException) {
+            false
         }
     }
 

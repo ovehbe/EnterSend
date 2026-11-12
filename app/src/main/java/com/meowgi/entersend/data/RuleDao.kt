@@ -49,4 +49,7 @@ interface RuleDao {
 
     @Query("DELETE FROM app_rules WHERE packageName = :pkg")
     fun delete(pkg: String)
+
+    @Query("DELETE FROM app_rules")
+    fun deleteAll()
 }

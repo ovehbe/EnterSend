@@ -47,9 +47,13 @@ health dot (grey: no sends yet, green: at least 80 % confirmed, yellow: at least
 Search by name or package; "Only apps that need teaching" shows apps where Enter found no send button,
 that fail often, or that were updated since they were taught ("Needs re-check after update").
 System apps are hidden until you check **Show system apps**. Runtime defaults (no DB row): SystemUI,
-home, IMEs, Settings, and EnterSend itself are always Off; other `FLAG_SYSTEM` packages without a
-launcher icon default Off and never prompt; anything with a launcher icon (including Google Messages)
-behaves normally. Only a manual Settings override writes a mode row; existing rows keep their mode.
+home, IMEs and Settings are always Off; every other `FLAG_SYSTEM` package also defaults Off and is
+never auto-prompted (enable them manually in Settings if you want). Only launcher-visible non-system
+apps get a one-time teach notification when opened without a config. EnterSend itself is not always-Off
+(setup test chat) but is never prompted. Only a manual Settings override writes a mode row; existing
+rows keep their mode. Settings changes apply to the running accessibility service immediately.
+**Profiles** (Save current as… / Switch / Rename / Delete) store full config snapshots for different
+keyboard heights; **Export / Import** writes a versioned JSON file via the system document picker.
 Select an app for: Teach / Re-teach, mode Auto (auto-detect only), Learned (taught rule, then auto-detect,
 then tap spot), Pass-through (Enter goes to the app), Off, and Reset (forget the app and its crop).
 Teach / Done cards sit at the **top** of the screen by default (bottom only when the focused field is

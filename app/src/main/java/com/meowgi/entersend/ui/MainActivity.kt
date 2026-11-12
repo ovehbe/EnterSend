@@ -6,9 +6,11 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
+import android.text.InputType
 import android.text.TextWatcher
 import android.view.View
 import android.widget.CheckBox
@@ -19,11 +21,14 @@ import android.widget.Toast
 import com.meowgi.entersend.EnterSendApp
 import com.meowgi.entersend.R
 import com.meowgi.entersend.ServiceWatch
+import com.meowgi.entersend.data.AppRule
+import com.meowgi.entersend.data.ConfigJson
 import com.meowgi.entersend.data.Mode
+import com.meowgi.entersend.data.ProfileStore
 import com.meowgi.entersend.service.EnterSendService
 import java.io.File
 
-/** Settings: per-app modes, health and teaching. */
+/** Settings: per-app modes, health, teaching, profiles, and config export/import. */
 class MainActivity : Activity() {
     private val app get() = application as EnterSendApp
     private lateinit var adapter: AppListAdapter
@@ -31,12 +36,18 @@ class MainActivity : Activity() {
     private lateinit var needsOnly: CheckBox
     private lateinit var showSystem: CheckBox
     private lateinit var empty: TextView
+    private lateinit var profileLabel: TextView
+    private lateinit var profiles: ProfileStore
     private var rows: List<AppRow>? = null
+    private var exportAllProfiles = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = prefs(this)
         if (!prefs.getBoolean(KEY_SETUP_DONE, false)) startActivity(Intent(this, SetupActivity::class.java))
+
+        profiles = ProfileStore(this)
+        app.io.execute { profiles.ensureDefault(app.db.rules()) }
 
         setContentView(R.layout.activity_main)
         findViewById<View>(R.id.banner_fix).setOnClickListener { ServiceWatch.openAccessibilitySettings(this) }
@@ -46,6 +57,10 @@ class MainActivity : Activity() {
             }
         }
         findViewById<View>(R.id.open_setup).setOnClickListener { startActivity(Intent(this, SetupActivity::class.java)) }
+        findViewById<View>(R.id.profiles_button).setOnClickListener { showProfilesMenu() }
+        findViewById<View>(R.id.export_button).setOnClickListener { showExportMenu() }
+        findViewById<View>(R.id.import_button).setOnClickListener { startImport() }
+        profileLabel = findViewById(R.id.profile_label)
         handleTeachIntent(intent)
         search = findViewById(R.id.search)
         needsOnly = findViewById(R.id.needs_teaching)
@@ -79,12 +94,28 @@ class MainActivity : Activity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         findViewById<View>(R.id.banner_notifications).visibility = if (notifDenied) View.VISIBLE else View.GONE
         ServiceWatch.updateNotice(this, running)
+        refreshProfileLabel()
         reload()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        when (requestCode) {
+            REQ_EXPORT -> app.io.execute { exportTo(uri) }
+            REQ_IMPORT -> app.io.execute { importFrom(uri) }
+        }
     }
 
     private fun handleTeachIntent(intent: Intent?) {
         val pkg = intent?.getStringExtra(com.meowgi.entersend.service.NotifyActionReceiver.EXTRA_PACKAGE) ?: return
         teach(pkg)
+    }
+
+    private fun refreshProfileLabel() {
+        profileLabel.text = getString(R.string.profile_active, profiles.activeName())
     }
 
     private fun reload() {
@@ -138,20 +169,27 @@ class MainActivity : Activity() {
             Action.RESET -> write(row.pkg) {
                 row.rule.cropPath?.let { File(it).delete() }
                 app.db.rules().delete(row.pkg)
+                AppRule(row.pkg)
             }
             else -> write(row.pkg) {
                 val dao = app.db.rules()
                 dao.ensure(row.pkg)
-                dao.upsert(dao.get(row.pkg)!!.copy(mode = action.mode!!.name))
+                val updated = dao.get(row.pkg)!!.copy(mode = action.mode!!.name)
+                dao.upsert(updated)
+                updated
             }
         }
     }
 
-    private fun write(pkg: String, block: () -> Unit) {
+    /**
+     * Persists on the IO thread, then pushes the new rule into the live [RuleStore] so the
+     * accessibility service applies the change immediately (no restart).
+     */
+    private fun write(pkg: String, block: () -> AppRule?) {
         app.io.execute {
-            block()
+            val rule = block() ?: AppRule(pkg)
             runOnUiThread {
-                EnterSendService.instance?.store?.refresh(pkg)
+                EnterSendService.instance?.store?.putLocal(rule)
                 reload()
             }
         }
@@ -173,6 +211,192 @@ class MainActivity : Activity() {
         startActivity(launch)
     }
 
+    private fun showProfilesMenu() {
+        val items = arrayOf(
+            getString(R.string.profile_save_as),
+            getString(R.string.profile_switch),
+            getString(R.string.profile_rename),
+            getString(R.string.profile_delete),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.profiles_title))
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> saveProfileAs()
+                    1 -> switchProfile()
+                    2 -> renameProfile()
+                    3 -> deleteProfile()
+                }
+            }
+            .show()
+    }
+
+    private fun saveProfileAs() {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            hint = getString(R.string.profile_name_hint)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.profile_save_as)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = input.text.toString().trim().ifEmpty { return@setPositiveButton }
+                app.io.execute {
+                    profiles.saveCurrentAs(name, app.db.rules())
+                    runOnUiThread {
+                        refreshProfileLabel()
+                        Toast.makeText(this, R.string.profile_saved, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun switchProfile() {
+        val list = profiles.list()
+        val labels = list.map {
+            if (it.id == profiles.activeId()) getString(R.string.current_choice, it.name) else it.name
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.profile_switch)
+            .setItems(labels) { _, which ->
+                val meta = list[which]
+                if (meta.id == profiles.activeId()) return@setItems
+                app.io.execute {
+                    profiles.switchTo(meta.id, app.db.rules(), EnterSendService.instance?.store)
+                    runOnUiThread {
+                        refreshProfileLabel()
+                        reload()
+                        Toast.makeText(this, getString(R.string.profile_switched, meta.name), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun renameProfile() {
+        val list = profiles.list()
+        val labels = list.map { it.name }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.profile_rename)
+            .setItems(labels) { _, which ->
+                val meta = list[which]
+                val input = EditText(this).apply {
+                    setText(meta.name)
+                    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+                }
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.profile_rename)
+                    .setView(input)
+                    .setPositiveButton(android.R.string.ok) { _, _ ->
+                        val name = input.text.toString().trim().ifEmpty { return@setPositiveButton }
+                        profiles.rename(meta.id, name)
+                        refreshProfileLabel()
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            }
+            .show()
+    }
+
+    private fun deleteProfile() {
+        val list = profiles.list()
+        if (list.size <= 1) {
+            Toast.makeText(this, R.string.profile_cannot_delete_last, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = list.map { it.name }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.profile_delete)
+            .setItems(labels) { _, which ->
+                val meta = list[which]
+                AlertDialog.Builder(this)
+                    .setMessage(getString(R.string.profile_delete_confirm, meta.name))
+                    .setPositiveButton(R.string.profile_delete) { _, _ ->
+                        app.io.execute {
+                            try {
+                                profiles.delete(meta.id, app.db.rules(), EnterSendService.instance?.store)
+                                runOnUiThread {
+                                    refreshProfileLabel()
+                                    reload()
+                                }
+                            } catch (e: IllegalStateException) {
+                                runOnUiThread {
+                                    Toast.makeText(this, e.message, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            }
+            .show()
+    }
+
+    private fun showExportMenu() {
+        val items = arrayOf(
+            getString(R.string.export_all_profiles),
+            getString(R.string.export_active_profile),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.export_config)
+            .setItems(items) { _, which ->
+                exportAllProfiles = which == 0
+                startActivityForResult(
+                    Intent(Intent.ACTION_CREATE_DOCUMENT)
+                        .addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType("application/json")
+                        .putExtra(Intent.EXTRA_TITLE, "entersend-config.json"),
+                    REQ_EXPORT,
+                )
+            }
+            .show()
+    }
+
+    private fun startImport() {
+        startActivityForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/json"),
+            REQ_IMPORT,
+        )
+    }
+
+    private fun exportTo(uri: Uri) {
+        try {
+            val bundle = profiles.exportBundle(app.db.rules(), exportAllProfiles)
+            contentResolver.openOutputStream(uri)?.use { ConfigJson.write(bundle, it) }
+                ?: throw IllegalStateException("Cannot open output")
+            runOnUiThread { Toast.makeText(this, R.string.export_done, Toast.LENGTH_SHORT).show() }
+        } catch (e: Exception) {
+            runOnUiThread {
+                Toast.makeText(this, getString(R.string.export_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun importFrom(uri: Uri) {
+        try {
+            val bundle = contentResolver.openInputStream(uri)?.use { ConfigJson.read(it) }
+                ?: throw ConfigJson.FormatException("Cannot open file")
+            profiles.importBundle(bundle, app.db.rules(), EnterSendService.instance?.store)
+            runOnUiThread {
+                refreshProfileLabel()
+                reload()
+                Toast.makeText(this, R.string.import_done, Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: ConfigJson.FormatException) {
+            runOnUiThread {
+                Toast.makeText(this, getString(R.string.import_bad_file, e.message ?: ""), Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            runOnUiThread {
+                Toast.makeText(this, getString(R.string.import_bad_file, e.message ?: ""), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private enum class Action(val label: Int, val mode: Mode? = null) {
         TEACH(R.string.action_teach),
         RETEACH(R.string.action_reteach),
@@ -186,6 +410,8 @@ class MainActivity : Activity() {
     companion object {
         const val KEY_SETUP_DONE = "setup_done"
         private const val KEY_ASKED_NOTIFICATIONS = "asked_notifications"
+        private const val REQ_EXPORT = 41
+        private const val REQ_IMPORT = 42
 
         fun prefs(context: Context) = context.getSharedPreferences("entersend", Context.MODE_PRIVATE)
     }

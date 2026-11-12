@@ -46,13 +46,18 @@ class EnterSendService : AccessibilityService() {
         val app = application as EnterSendApp
         val a11y = A11yDevice(this).also { device = NoticeDevice(it, this) }
         val policy = SystemAppPolicy(this)
+        val rules = RuleStore(app.db.rules(), app.io, { main.post(it) }, CropFiles(filesDir))
         attach(
             a11y,
-            RuleStore(app.db.rules(), app.io, { main.post(it) }, CropFiles(filesDir)),
+            rules,
             CardOverlay(this),
             policy = policy,
         )
-        notifier = NewAppNotifier(this, store!!, { LocalDate.now().toEpochDay() }, policy)
+        val prompt = NewAppNotifier(this, store!!, { LocalDate.now().toEpochDay() }, policy)
+        notifier = prompt
+        // Prompt once the rule finishes loading — avoids the race where WINDOW_STATE fires
+        // while RuleStore.refresh is still in flight and get() returns null.
+        store!!.setOnLoaded { pkg, state -> prompt.onAppSeen(pkg, state.rule) }
         instance = this
         ServiceWatch.updateNotice(this, running = true)
     }
@@ -85,6 +90,7 @@ class EnterSendService : AccessibilityService() {
         this.device = device
         this.store = store
         this.notifier = notifier
+        store.setOnLoaded { pkg, state -> this.notifier?.onAppSeen(pkg, state.rule) }
         val teach = TeachFlow(device, store, overlay, main, today, ::versionOf) { getString(it) }
         this.teach = teach
         enter = EnterHandler(
@@ -121,15 +127,9 @@ class EnterSendService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                // Loads (or reloads) the rule; NewAppNotifier runs from RuleStore.onLoaded.
                 store?.onForeground(pkg)
-                val state = store?.get(pkg)
-                if (state != null) notifier?.onAppSeen(pkg, state.rule)
-                else {
-                    // Still loading — ask again after a short delay once the rule is in memory.
-                    main.postDelayed({
-                        store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule) }
-                    }, 200)
-                }
+                store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule) }
             }
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,

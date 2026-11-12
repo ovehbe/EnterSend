@@ -69,6 +69,30 @@
     <string name="turn_on_first">Önce Erişilebilirlik ayarlarından EnterSend\'i açın.</string>
     <string name="cannot_open_app">Bu uygulama buradan açılamıyor.</string>
 
+    <!-- Profiller / dışa aktarma -->
+    <string name="profiles">Profiller</string>
+    <string name="profiles_title">Profiller</string>
+    <string name="profile_active">Profil: %1$s</string>
+    <string name="profile_active_placeholder">Profil: Varsayılan</string>
+    <string name="profile_save_as">Şimdikini kaydet…</string>
+    <string name="profile_switch">Geç…</string>
+    <string name="profile_rename">Yeniden adlandır…</string>
+    <string name="profile_delete">Sil…</string>
+    <string name="profile_name_hint">Profil adı</string>
+    <string name="profile_saved">Profil kaydedildi</string>
+    <string name="profile_switched">%1$s profiline geçildi</string>
+    <string name="profile_cannot_delete_last">En az bir profil kalmalı</string>
+    <string name="profile_delete_confirm">\"%1$s\" profili silinsin mi?</string>
+    <string name="export">Dışa aktar</string>
+    <string name="import_config">İçe aktar</string>
+    <string name="export_config">Yapılandırmayı dışa aktar</string>
+    <string name="export_all_profiles">Tüm profiller</string>
+    <string name="export_active_profile">Yalnızca etkin profil</string>
+    <string name="export_done">Yapılandırma dışa aktarıldı</string>
+    <string name="export_failed">Dışa aktarma başarısız: %1$s</string>
+    <string name="import_done">Yapılandırma içe aktarıldı</string>
+    <string name="import_bad_file">İçe aktarılamadı: %1$s</string>
+
     <!-- Hizmet durumu bildirimi -->
     <string name="channel_service">EnterSend durumu</string>
     <string name="service_off_title">EnterSend kapalı</string>

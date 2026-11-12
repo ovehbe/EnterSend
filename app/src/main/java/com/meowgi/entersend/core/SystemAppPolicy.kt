@@ -17,8 +17,10 @@ import com.meowgi.entersend.data.Mode
  * Always Off: SystemUI, current home, every enabled IME, Settings.
  * EnterSend itself is **not** always-off — the setup test chat needs Enter; non-chat fields
  * in our UI are still skipped by [ChatFieldGuard]. We never prompt to teach ourselves.
- * Off by default, no notification: FLAG_SYSTEM packages with no launcher icon.
- * Everything with a launcher icon behaves normally (system or not) — Google Messages, stock SMS.
+ *
+ * All FLAG_SYSTEM / FLAG_UPDATED_SYSTEM_APP packages default Off and are never auto-prompted
+ * (including launchable ones like stock Messages). The user can still enable them in Settings.
+ * Only launcher-visible non-system apps are prompted once when opened without a config.
  */
 class SystemAppPolicy(private val context: Context) {
     private val pm: PackageManager get() = context.packageManager
@@ -35,32 +37,27 @@ class SystemAppPolicy(private val context: Context) {
     /** FLAG_SYSTEM (or updated-system) with no launcher activity. */
     fun isHiddenSystemApp(pkg: String): Boolean {
         if (isAlwaysOff(pkg)) return false // classified separately
-        val flags = try {
-            pm.getApplicationInfo(pkg, 0).flags
-        } catch (_: PackageManager.NameNotFoundException) {
-            return false
-        }
-        val system = flags and ApplicationInfo.FLAG_SYSTEM != 0 ||
+        return hasSystemFlag(pkg) && !hasLauncherIcon(pkg)
+    }
+
+    fun hasSystemFlag(pkg: String): Boolean = try {
+        val flags = pm.getApplicationInfo(pkg, 0).flags
+        flags and ApplicationInfo.FLAG_SYSTEM != 0 ||
             flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP != 0
-        return system && !hasLauncherIcon(pkg)
+    } catch (_: PackageManager.NameNotFoundException) {
+        false
     }
 
     fun isSystemApp(pkg: String): Boolean {
         if (isAlwaysOff(pkg) || isHiddenSystemApp(pkg)) return true
-        return try {
-            val flags = pm.getApplicationInfo(pkg, 0).flags
-            flags and ApplicationInfo.FLAG_SYSTEM != 0 ||
-                flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP != 0
-        } catch (_: PackageManager.NameNotFoundException) {
-            false
-        }
+        return hasSystemFlag(pkg)
     }
 
-    /** Defaults Off with no prompt — always-off list or hidden system app. */
-    fun defaultsOff(pkg: String): Boolean = isAlwaysOff(pkg) || isHiddenSystemApp(pkg)
+    /** Defaults Off with no prompt — always-off list or any system-flagged package. */
+    fun defaultsOff(pkg: String): Boolean = isAlwaysOff(pkg) || hasSystemFlag(pkg)
 
     fun mayPrompt(pkg: String): Boolean =
-        pkg != context.packageName && !defaultsOff(pkg)
+        pkg != context.packageName && hasLauncherIcon(pkg) && !defaultsOff(pkg)
 
     /**
      * Resolves the effective mode. A non-null [AppRule.mode] (manual override / prior row)

@@ -69,6 +69,30 @@
     <string name="turn_on_first">Turn on EnterSend in Accessibility settings first.</string>
     <string name="cannot_open_app">This app can\'t be opened from here.</string>
 
+    <!-- Profiles / export -->
+    <string name="profiles">Profiles</string>
+    <string name="profiles_title">Profiles</string>
+    <string name="profile_active">Profile: %1$s</string>
+    <string name="profile_active_placeholder">Profile: Default</string>
+    <string name="profile_save_as">Save current as…</string>
+    <string name="profile_switch">Switch…</string>
+    <string name="profile_rename">Rename…</string>
+    <string name="profile_delete">Delete…</string>
+    <string name="profile_name_hint">Profile name</string>
+    <string name="profile_saved">Profile saved</string>
+    <string name="profile_switched">Switched to %1$s</string>
+    <string name="profile_cannot_delete_last">Keep at least one profile</string>
+    <string name="profile_delete_confirm">Delete profile \"%1$s\"?</string>
+    <string name="export">Export</string>
+    <string name="import_config">Import</string>
+    <string name="export_config">Export config</string>
+    <string name="export_all_profiles">All profiles</string>
+    <string name="export_active_profile">Active profile only</string>
+    <string name="export_done">Config exported</string>
+    <string name="export_failed">Export failed: %1$s</string>
+    <string name="import_done">Config imported</string>
+    <string name="import_bad_file">Could not import: %1$s</string>
+
     <!-- Service state notification -->
     <string name="channel_service">EnterSend status</string>
     <string name="service_off_title">EnterSend is off</string>

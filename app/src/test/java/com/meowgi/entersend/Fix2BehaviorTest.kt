@@ -240,6 +240,26 @@ class Fix2BehaviorTest {
 
     @Config(sdk = [29])
     @Test fun notificationThrottledAndDeclined() {
+        // Fix6: mayPrompt requires a launcher-visible non-system package.
+        val ai = android.content.pm.ApplicationInfo().apply { packageName = "com.example.chat" }
+        shadowOf(context().packageManager).installPackage(
+            android.content.pm.PackageInfo().apply { packageName = "com.example.chat"; applicationInfo = ai },
+        )
+        val ri = android.content.pm.ResolveInfo().apply {
+            activityInfo = android.content.pm.ActivityInfo().apply {
+                packageName = "com.example.chat"
+                name = "com.example.chat.Main"
+                applicationInfo = ai
+            }
+        }
+        shadowOf(context().packageManager).addResolveInfoForIntent(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage("com.example.chat"),
+            ri,
+        )
+        shadowOf(context().packageManager).addResolveInfoForIntent(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
+            ri,
+        )
         val store = RuleStore(db.rules(), direct, direct, crops)
         val notifier = NewAppNotifier(context(), store, { day })
         val nm = context().getSystemService(NotificationManager::class.java)

@@ -55,11 +55,12 @@ class SystemAppPolicyTest {
         assertEquals(Mode.OFF, policy.resolveMode(AppRule("com.android.providers.downloads")))
     }
 
-    @Test fun launchableSystemAppBehavesNormallyIncludingMessages() {
+    @Test fun launchableSystemAppDefaultsOffNeverPrompted() {
+        // Fix6: all FLAG_SYSTEM packages stay Off by default and are never auto-prompted.
         install("com.google.android.apps.messaging", system = true, updated = true, launcher = true)
-        assertFalse(policy.defaultsOff("com.google.android.apps.messaging"))
-        assertTrue(policy.mayPrompt("com.google.android.apps.messaging"))
-        assertEquals(Mode.AUTO, policy.resolveMode(AppRule("com.google.android.apps.messaging")))
+        assertTrue(policy.defaultsOff("com.google.android.apps.messaging"))
+        assertFalse(policy.mayPrompt("com.google.android.apps.messaging"))
+        assertEquals(Mode.OFF, policy.resolveMode(AppRule("com.google.android.apps.messaging")))
     }
 
     @Test fun existingModeRowWinsOverRuntimeDefault() {
@@ -71,11 +72,17 @@ class SystemAppPolicyTest {
     @Test fun userAppUnchanged() {
         install("com.whatsapp", system = false, launcher = true)
         assertFalse(policy.isSystemApp("com.whatsapp"))
+        assertTrue(policy.mayPrompt("com.whatsapp"))
         assertEquals(Mode.AUTO, policy.resolveMode(AppRule("com.whatsapp")))
         assertEquals(
             Mode.LEARNED,
             policy.resolveMode(AppRule("com.whatsapp", sendViewId = "id/send")),
         )
+    }
+
+    @Test fun userAppWithoutLauncherIsNotPrompted() {
+        install("com.example.hidden", system = false, launcher = false)
+        assertFalse(policy.mayPrompt("com.example.hidden"))
     }
 
     private fun install(pkg: String, system: Boolean, launcher: Boolean, updated: Boolean = false) {
