@@ -13,6 +13,8 @@
     <string name="card_ask_keys">Alt+Y evet · Alt+N hayır · Esc sonra</string>
     <string name="card_teaching_title">Şimdi bir mesaj gönderin</string>
     <string name="card_teaching_keys">Uygulamanın gönder düğmesine dokunun · Esc iptal</string>
+    <string name="card_missed_tap">O dokunuşu göremedim. Gönder düğmesine yeniden dokunun.</string>
+    <string name="press_a_key">Bir tuşa basın…</string>
     <string name="card_confirm_title">Gönder düğmesi bu mu?</string>
     <string name="card_confirm_title_label">Gönder düğmesi \"%1$s\" mi?</string>
     <string name="card_confirm_keys">Alt+Y evet · Alt+N hayır, tekrar dene · Esc iptal</string>

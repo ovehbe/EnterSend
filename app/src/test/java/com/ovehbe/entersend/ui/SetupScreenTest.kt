@@ -10,6 +10,7 @@ import com.ovehbe.entersend.context
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -65,6 +66,15 @@ class SetupScreenTest {
             assertTrue(a.resources.getResourceEntryName(id), v.isFocusable)
             assertNotNull(a.resources.getResourceEntryName(id), v.foreground)
         }
+    }
+
+    @Test fun keyBoxShowsPressAKeyAndTakesFocusFromTap() {
+        val box = a.findViewById<TextView>(R.id.key_box)
+        assertEquals(a.getString(R.string.press_a_key), box.text.toString())
+        assertTrue(box.isClickable)
+        assertTrue(box.isFocusableInTouchMode)
+        box.performClick()
+        assertTrue(box.isFocused)
     }
 
     @Test fun doneMarksSetupFinished() {

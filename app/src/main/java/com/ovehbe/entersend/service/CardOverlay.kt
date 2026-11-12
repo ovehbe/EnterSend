@@ -39,9 +39,9 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
                 keys.setText(R.string.card_ask_keys)
                 close.setText(R.string.later)
             }
-            Card.Teaching -> {
+            is Card.Teaching -> {
                 title.setText(R.string.card_teaching_title)
-                keys.setText(R.string.card_teaching_keys)
+                keys.text = card.status ?: ctx.getString(R.string.card_teaching_keys)
                 yes.visibility = View.GONE
                 no.visibility = View.GONE
                 close.setText(R.string.cancel)
@@ -68,14 +68,22 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
             PixelFormat.TRANSLUCENT,
         ).apply {
             // The teaching bar sits at the top so it never covers (or gets screenshotted over) the send button.
-            gravity = if (card == Card.Teaching) Gravity.TOP else Gravity.BOTTOM
+            gravity = if (card is Card.Teaching) Gravity.TOP else Gravity.BOTTOM
         }
-        wm.addView(v, lp)
-        view = v
+        try {
+            wm.addView(v, lp)
+            view = v
+        } catch (_: RuntimeException) {
+            // BadTokenException etc. — leave teaching state so the user can Esc-cancel; don't kill the service.
+            view = null
+        }
     }
 
     override fun hide() {
-        view?.let { wm.removeView(it) }
+        try {
+            view?.let { wm.removeView(it) }
+        } catch (_: RuntimeException) {
+        }
         view = null
     }
 }

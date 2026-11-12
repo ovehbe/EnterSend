@@ -121,7 +121,7 @@ class TeachFlowTest {
         s.enter()
         assertEquals(listOf(false, false), s.tap(KeyEvent.KEYCODE_Y))
         assertNull(overlay.card)
-        assertFalse(overlay.shown.any { it == Card.Teaching })
+        assertFalse(overlay.shown.any { it is Card.Teaching })
     }
 
     @Test fun shiftedLettersAlsoPassThrough() {
@@ -159,7 +159,7 @@ class TeachFlowTest {
         assertTrue(s.onKeyEvent(key(KeyEvent.ACTION_DOWN, 50_000, code = KeyEvent.KEYCODE_Y, meta = alt)))
         assertTrue(s.onKeyEvent(key(KeyEvent.ACTION_DOWN, 50_015, code = KeyEvent.KEYCODE_Y, meta = alt, deviceId = VIRTUAL)))
         assertTrue(s.onKeyEvent(key(KeyEvent.ACTION_UP, 50_000, 50_080, code = KeyEvent.KEYCODE_Y, meta = alt)))
-        assertEquals(Card.Teaching, overlay.card)
+        assertEquals(Card.Teaching(), overlay.card)
     }
 
     // --- Teaching ---
@@ -167,7 +167,7 @@ class TeachFlowTest {
     private fun teachUpToConfirm(s: EnterSendService) {
         s.enter()
         s.altKey(KeyEvent.KEYCODE_Y)
-        assertEquals(Card.Teaching, overlay.card)
+        assertEquals(Card.Teaching(), overlay.card)
         s.textChanged()
         idle(500)
         s.teach!!.onClicked(pkg, customSend)
@@ -208,7 +208,7 @@ class TeachFlowTest {
         val s = start()
         teachUpToConfirm(s)
         assertEquals(listOf(true, true), s.altKey(KeyEvent.KEYCODE_N))
-        assertEquals(Card.Teaching, overlay.card)
+        assertEquals(Card.Teaching(), overlay.card)
         assertNull(rule()!!.sendClassPath)
         assertFalse(rule()!!.teachDeclined)
     }
@@ -217,7 +217,7 @@ class TeachFlowTest {
         val s = start()
         s.enter()
         overlay.tap(Choice.YES)
-        assertEquals(Card.Teaching, overlay.card)
+        assertEquals(Card.Teaching(), overlay.card)
         idle(500)
         s.teach!!.onClicked(pkg, customSend)
         overlay.tap(Choice.YES)
@@ -229,7 +229,7 @@ class TeachFlowTest {
         s.enter()
         s.altKey(KeyEvent.KEYCODE_Y)
         s.teach!!.onClicked(pkg, NodeSnap(className = "android.widget.EditText", editable = true, clickable = true, bounds = FIELD_BOX))
-        assertEquals(Card.Teaching, overlay.card)
+        assertEquals(Card.Teaching(), overlay.card)
     }
 
     @Test fun enterAndTypingPassThroughWhileTeachingAndEscCancels() {
@@ -238,7 +238,7 @@ class TeachFlowTest {
         s.altKey(KeyEvent.KEYCODE_Y)
         assertEquals(listOf(false, false), s.tap(KeyEvent.KEYCODE_H))
         assertEquals(listOf(false, false), s.enter())
-        assertEquals(Card.Teaching, overlay.card)
+        assertEquals(Card.Teaching(), overlay.card)
         assertTrue(device.clicks.isEmpty())
 
         assertEquals(listOf(true, true), s.tap(KeyEvent.KEYCODE_ESCAPE))

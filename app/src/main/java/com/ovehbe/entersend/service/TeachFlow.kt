@@ -1,7 +1,9 @@
 package com.ovehbe.entersend.service
 
+import android.content.Context
 import android.os.Handler
 import android.view.KeyEvent
+import com.ovehbe.entersend.R
 import com.ovehbe.entersend.core.Box
 import com.ovehbe.entersend.core.NodeSnap
 import com.ovehbe.entersend.core.Pixels
@@ -21,6 +23,7 @@ class TeachFlow(
     private val main: Handler,
     private val today: () -> Long,
     private val versionOf: (String) -> Long?,
+    private val strings: (Int) -> String = { "" },
 ) {
     private sealed interface State
     private data object Idle : State
@@ -31,6 +34,7 @@ class TeachFlow(
     private class Confirming(val pkg: String, val rule: AppRule, val crop: Pixels?) : State
 
     private var state: State = Idle
+    private var onChoice: ((Choice) -> Unit) = ::handleChoice
 
     val isTeaching get() = state is Teaching || state is Confirming
 
@@ -40,7 +44,7 @@ class TeachFlow(
         val asking = Asking(rule.packageName)
         state = asking
         store.markAsked(rule.packageName, today())
-        overlay.show(Card.Ask(reteach = rule.isTaught), ::onChoice)
+        overlay.show(Card.Ask(reteach = rule.isTaught), onChoice)
         main.postDelayed({ if (state === asking) finish() }, ASK_TIMEOUT_MS)
     }
 
@@ -48,7 +52,7 @@ class TeachFlow(
     fun startTeaching(pkg: String) {
         val teaching = Teaching(pkg)
         state = teaching
-        overlay.show(Card.Teaching, ::onChoice)
+        overlay.show(Card.Teaching(), onChoice)
         main.postDelayed({ captureFor(teaching) }, SHOT_DELAY_MS)
         main.postDelayed({ if (state === teaching) finish() }, TEACH_TIMEOUT_MS)
     }
@@ -58,9 +62,9 @@ class TeachFlow(
         if (state is Idle || isModifier(e.keyCode)) return false
         val answerable = state is Asking || state is Confirming
         return when {
-            e.keyCode == KeyEvent.KEYCODE_ESCAPE -> { onChoice(Choice.CLOSE); true }
-            answerable && e.isAltPressed && e.keyCode == KeyEvent.KEYCODE_Y -> { onChoice(Choice.YES); true }
-            answerable && e.isAltPressed && e.keyCode == KeyEvent.KEYCODE_N -> { onChoice(Choice.NO); true }
+            e.keyCode == KeyEvent.KEYCODE_ESCAPE -> { handleChoice(Choice.CLOSE); true }
+            answerable && e.isAltPressed && e.keyCode == KeyEvent.KEYCODE_Y -> { handleChoice(Choice.YES); true }
+            answerable && e.isAltPressed && e.keyCode == KeyEvent.KEYCODE_N -> { handleChoice(Choice.NO); true }
             else -> {
                 if (state is Asking) finish()
                 false
@@ -109,10 +113,16 @@ class TeachFlow(
             windowHeight = window?.height,
         )
         state = Confirming(pkg, rule, crop)
-        overlay.show(Card.Confirm(crop, node.desc ?: node.text), ::onChoice)
+        overlay.show(Card.Confirm(crop, node.desc ?: node.text), onChoice)
     }
 
-    private fun onChoice(choice: Choice) {
+    /** Click event arrived but the node wasn't readable — show a visible error, don't fail silently. */
+    fun onMissedClick() {
+        if (state !is Teaching) return
+        overlay.show(Card.Teaching(status = strings(R.string.card_missed_tap)), onChoice)
+    }
+
+    private fun handleChoice(choice: Choice) {
         when (val s = state) {
             is Asking -> when (choice) {
                 Choice.YES -> startTeaching(s.pkg)
@@ -157,5 +167,8 @@ class TeachFlow(
         )
 
         fun isModifier(code: Int) = code in MODIFIERS
+
+        fun withContext(context: Context, device: Device, store: RuleStore, overlay: Overlay, main: Handler, today: () -> Long, versionOf: (String) -> Long?) =
+            TeachFlow(device, store, overlay, main, today, versionOf) { context.getString(it) }
     }
 }

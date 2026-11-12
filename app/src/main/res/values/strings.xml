@@ -13,6 +13,8 @@
     <string name="card_ask_keys">Alt+Y yes · Alt+N no · Esc later</string>
     <string name="card_teaching_title">Send a message now</string>
     <string name="card_teaching_keys">Tap the app\'s send button · Esc cancel</string>
+    <string name="card_missed_tap">Couldn\'t see that tap. Tap the send button again.</string>
+    <string name="press_a_key">Press a key…</string>
     <string name="card_confirm_title">Is this the send button?</string>
     <string name="card_confirm_title_label">Is \"%1$s\" the send button?</string>
     <string name="card_confirm_keys">Alt+Y yes · Alt+N no, try again · Esc cancel</string>

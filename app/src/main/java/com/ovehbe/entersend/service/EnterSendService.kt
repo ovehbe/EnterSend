@@ -1,17 +1,17 @@
 package com.ovehbe.entersend.service
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
-import android.content.Intent
 import com.ovehbe.entersend.EnterSendApp
 import com.ovehbe.entersend.ServiceWatch
 import com.ovehbe.entersend.core.KeyGate
 import com.ovehbe.entersend.data.CropFiles
-import java.time.LocalDate
 
 class EnterSendService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
@@ -23,6 +23,17 @@ class EnterSendService : AccessibilityService() {
         private set
 
     override fun onServiceConnected() {
+        // Re-assert the XML flags: some OEM builds drop key filtering unless set at connect time.
+        serviceInfo = serviceInfo.apply {
+            eventTypes = eventTypes or
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                AccessibilityEvent.TYPE_VIEW_CLICKED or
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+            flags = flags or
+                AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
         val app = application as EnterSendApp
         attach(
             A11yDevice(this),
@@ -53,9 +64,9 @@ class EnterSendService : AccessibilityService() {
         device: Device,
         store: RuleStore,
         overlay: Overlay,
-        today: () -> Long = { LocalDate.now().toEpochDay() },
+        today: () -> Long = { java.time.LocalDate.now().toEpochDay() },
     ) {
-        val teach = TeachFlow(device, store, overlay, main, today, ::versionOf)
+        val teach = TeachFlow(device, store, overlay, main, today, ::versionOf) { getString(it) }
         this.store = store
         this.teach = teach
         enter = EnterHandler(device, store, main) { teach.offer(it) }
@@ -78,7 +89,12 @@ class EnterSendService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> store?.onForeground(pkg)
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> teach?.onTextChanged(pkg)
             AccessibilityEvent.TYPE_VIEW_CLICKED -> if (teach?.isTeaching == true) {
-                event.source?.let { teach?.onClicked(pkg, A11yDevice.clickedSnap(it)) }
+                val source = event.source
+                if (source != null) {
+                    teach?.onClicked(pkg, A11yDevice.clickedSnap(source))
+                } else {
+                    teach?.onMissedClick()
+                }
             }
         }
     }

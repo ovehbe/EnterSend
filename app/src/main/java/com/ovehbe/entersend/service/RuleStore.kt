@@ -69,14 +69,15 @@ class RuleStore(
         }
     }
 
-    /** Saves a taught rule; [crop] replaces the old crop file. */
+    /** Saves a taught rule; [crop] replaces the old crop file. New file first, then DB, then delete old. */
     fun saveTaught(rule: AppRule, crop: Pixels?) {
         val pkg = rule.packageName
         io.execute {
-            dao.get(pkg)?.cropPath?.let(crops::delete)
-            val saved = rule.copy(cropPath = crop?.let { crops.save(pkg, it) })
+            val previous = dao.get(pkg)?.cropPath
+            val saved = rule.copy(cropPath = crop?.let { crops.save(pkg, it) } ?: rule.cropPath)
             dao.upsert(saved)
-            main.execute { loaded[pkg] = AppState(saved, crop) }
+            if (previous != null && previous != saved.cropPath) crops.delete(previous)
+            main.execute { loaded[pkg] = AppState(saved, crop ?: saved.cropPath?.let(crops::load)) }
         }
     }
 

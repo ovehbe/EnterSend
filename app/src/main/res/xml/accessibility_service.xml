@@ -8,6 +8,7 @@
     android:canRetrieveWindowContent="true"
     android:canTakeScreenshot="true"
     android:description="@string/a11y_description"
+    android:isAccessibilityTool="true"
     android:notificationTimeout="50"
     android:settingsActivity="com.ovehbe.entersend.ui.MainActivity"
     android:summary="@string/a11y_summary" />

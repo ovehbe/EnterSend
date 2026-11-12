@@ -138,15 +138,16 @@ class MainActivity : Activity() {
     private fun teach(pkg: String) {
         val service = EnterSendService.instance
         val launch = packageManager.getLaunchIntentForPackage(pkg)
-        if (service == null) {
+        if (service == null || service.teach == null) {
             Toast.makeText(this, R.string.turn_on_first, Toast.LENGTH_LONG).show()
+            findViewById<View>(R.id.banner).visibility = View.VISIBLE
             return
         }
         if (launch == null) {
             Toast.makeText(this, R.string.cannot_open_app, Toast.LENGTH_LONG).show()
             return
         }
-        service.teach?.startTeaching(pkg)
+        service.teach!!.startTeaching(pkg)
         startActivity(launch)
     }
 

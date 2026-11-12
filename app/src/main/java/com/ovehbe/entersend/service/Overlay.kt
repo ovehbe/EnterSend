@@ -6,8 +6,8 @@ sealed interface Card {
     /** "Didn't find send. Teach this app?" (or the re-teach variant). */
     data class Ask(val reteach: Boolean) : Card
 
-    /** Slim bar: "Send a message now" with Cancel. */
-    data object Teaching : Card
+    /** Slim bar: "Send a message now" with Cancel. [status] is an error/hint under the title. */
+    data class Teaching(val status: String? = null) : Card
 
     /** "Is this the send button?" with the cropped button image. */
     class Confirm(val crop: Pixels?, val label: String?) : Card

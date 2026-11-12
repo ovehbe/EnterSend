@@ -19,7 +19,7 @@ class CardOverlayTest {
         val service = Robolectric.setupService(EnterSendService::class.java)
         val overlay = CardOverlay(service)
         val wm = Shadow.extract<ShadowWindowManagerImpl>(service.getSystemService(WindowManager::class.java))
-        for (card in listOf(Card.Ask(false), Card.Ask(true), Card.Teaching, Card.Confirm(solid(0xFF000000.toInt()), "Send"), Card.Confirm(null, "Send"))) {
+        for (card in listOf(Card.Ask(false), Card.Ask(true), Card.Teaching(), Card.Confirm(solid(0xFF000000.toInt()), "Send"), Card.Confirm(null, "Send"))) {
             overlay.show(card) {}
             val views = wm.views
             assertEquals(1, views.size)

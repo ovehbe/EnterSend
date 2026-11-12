@@ -9,10 +9,10 @@ import android.app.job.JobInfo
 import android.app.job.JobParameters
 import android.app.job.JobScheduler
 import android.app.job.JobService
-import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import com.ovehbe.entersend.service.EnterSendService
 import java.util.concurrent.TimeUnit
@@ -22,21 +22,36 @@ object ServiceWatch {
     private const val CHANNEL = "service_state"
     const val NOTIFICATION_ID = 1
     private const val JOB_ID = 1
+    /** Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS (API 31+). */
+    const val ACTION_ACCESSIBILITY_DETAILS = "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
 
     fun isRunning() = EnterSendService.instance != null
 
     fun accessibilitySettings(): Intent =
         Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-    /** Opens EnterSend's own accessibility page, or the accessibility list if that page doesn't exist. */
+    /**
+     * Opens EnterSend's own accessibility page, or the accessibility list if that page doesn't exist.
+     * EXTRA_COMPONENT_NAME must be a [ComponentName], not a flattened string — Settings crashes on
+     * Android 14 if the extra is the wrong type.
+     */
     fun openAccessibilitySettings(activity: Activity) {
-        val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-            .putExtra(Intent.EXTRA_COMPONENT_NAME, ComponentName(activity, EnterSendService::class.java).flattenToString())
-        try {
-            activity.startActivity(details)
-        } catch (_: ActivityNotFoundException) {
-            activity.startActivity(accessibilitySettings())
+        if (Build.VERSION.SDK_INT >= 31) {
+            try {
+                // Action added in API 31; pass a ComponentName (not a flattened String) or Settings crashes.
+                activity.startActivity(
+                    Intent(ACTION_ACCESSIBILITY_DETAILS)
+                        .putExtra(
+                            Intent.EXTRA_COMPONENT_NAME,
+                            ComponentName(activity, EnterSendService::class.java),
+                        ),
+                )
+                return
+            } catch (_: Exception) {
+                // Fall through to the accessibility list.
+            }
         }
+        activity.startActivity(accessibilitySettings())
     }
 
     /** Shows a persistent "EnterSend is off" notification while the service isn't running. */

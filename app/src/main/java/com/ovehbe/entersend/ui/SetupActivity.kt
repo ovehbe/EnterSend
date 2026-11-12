@@ -32,13 +32,16 @@ class SetupActivity : Activity() {
 
         findViewById<View>(R.id.step1_button).setOnClickListener { ServiceWatch.openAccessibilitySettings(this) }
 
-        findViewById<View>(R.id.key_box).setOnKeyListener { _, code, e ->
-            if (code != KeyEvent.KEYCODE_ENTER && code != KeyEvent.KEYCODE_NUMPAD_ENTER) return@setOnKeyListener false
-            if (e.action == KeyEvent.ACTION_DOWN) {
-                if (e.isShiftPressed) shiftEnterSeen = true else enterSeen = true
-                refresh()
+        findViewById<View>(R.id.key_box).apply {
+            setOnClickListener { requestFocus() }
+            setOnKeyListener { _, code, e ->
+                if (code != KeyEvent.KEYCODE_ENTER && code != KeyEvent.KEYCODE_NUMPAD_ENTER) return@setOnKeyListener false
+                if (e.action == KeyEvent.ACTION_DOWN) {
+                    if (e.isShiftPressed) shiftEnterSeen = true else enterSeen = true
+                    refresh()
+                }
+                true
             }
-            true
         }
 
         input.addTextChangedListener(object : TextWatcher {
@@ -78,11 +81,14 @@ class SetupActivity : Activity() {
     private fun refresh() {
         mark(R.id.step1_check, ServiceWatch.isRunning())
         mark(R.id.step2_check, enterSeen && shiftEnterSeen)
-        findViewById<TextView>(R.id.key_box).text = getString(
-            R.string.step2_status,
-            getString(if (enterSeen) R.string.check_yes else R.string.check_no),
-            getString(if (shiftEnterSeen) R.string.check_yes else R.string.check_no),
-        )
+        findViewById<TextView>(R.id.key_box).text = when {
+            enterSeen || shiftEnterSeen -> getString(
+                R.string.step2_status,
+                getString(if (enterSeen) R.string.check_yes else R.string.check_no),
+                getString(if (shiftEnterSeen) R.string.check_yes else R.string.check_no),
+            )
+            else -> getString(R.string.press_a_key)
+        }
         mark(R.id.step3_check, sent && newline)
         findViewById<TextView>(R.id.step3_status).text = getString(
             R.string.step3_status,
