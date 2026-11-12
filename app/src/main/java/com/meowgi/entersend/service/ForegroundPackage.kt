@@ -5,10 +5,13 @@ import android.view.accessibility.AccessibilityWindowInfo
 /**
  * Foreground package for **new-app prompts only**.
  *
- * Never used by Enter handling — Enter always uses the focused input field's package.
+ * Never used by Enter handling — Enter always uses the focused input field's package
+ * (including our own Setup screen).
  *
- * Prefers the TYPE_APPLICATION window that is active/focused. Ignores IME, accessibility
- * overlays, SystemUI, and our own package without clearing the previous app.
+ * Prefers the TYPE_APPLICATION window that is active/focused. Falls back to a usable
+ * WINDOW_STATE event package (0.2.4-compatible) before treating root as authoritative,
+ * because root is often the IME while the event still names the chat app. Ignores IME,
+ * accessibility overlays, SystemUI, and our own package without clearing the previous app.
  */
 object ForegroundPackage {
     data class WindowHint(
@@ -37,8 +40,10 @@ object ForegroundPackage {
             ?: apps.maxByOrNull { it.layer }
         usable(preferred?.packageName)?.let { return Resolved(it, "windows") }
 
-        usable(rootPackage)?.let { return Resolved(it, "root") }
+        // 0.2.4-compatible: WINDOW_STATE event package is a strong signal when windows
+        // are empty/late or only show IME/overlay. Prefer event over IME root.
         usable(eventPackage)?.let { return Resolved(it, "event") }
+        usable(rootPackage)?.let { return Resolved(it, "root") }
         return null
     }
 

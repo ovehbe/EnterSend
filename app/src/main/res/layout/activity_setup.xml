@@ -151,17 +151,18 @@
                             android:maxLines="4" />
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <com.google.android.material.button.MaterialButton
+                    <!-- ImageButton (not Material IconButton): a11y exposes contentDescription
+                         + clickable the same way 0.2.4 did, so Setup Enter can auto-find Send. -->
+                    <ImageButton
                         android:id="@+id/send_button"
-                        style="@style/Widget.Material3.Button.IconButton.Filled"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
                         android:layout_marginStart="8dp"
+                        android:background="?attr/colorPrimary"
                         android:contentDescription="@string/send"
                         android:foreground="@drawable/focus_ring"
-                        app:icon="@android:drawable/ic_menu_send"
-                        app:iconGravity="textStart"
-                        app:iconPadding="0dp" />
+                        android:src="@android:drawable/ic_menu_send"
+                        android:tint="?attr/colorOnPrimary" />
                 </LinearLayout>
 
                 <TextView

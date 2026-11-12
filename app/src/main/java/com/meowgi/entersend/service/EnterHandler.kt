@@ -33,9 +33,11 @@ class EnterHandler(
     fun onEnter(e: KeyEvent): Boolean {
         if (e.isCtrlPressed || e.isAltPressed || e.isMetaPressed) return false
         // Package comes ONLY from the focused input (FOCUS_INPUT) — never prompt foreground.
+        // Own package (Setup test chat) is a valid Enter target; do not require prompt warm.
+        // Null = stored rule still loading (pass through — never invent Off/don't-ask).
         val field = device.focusedField() ?: return decide(null, "no-field", false)
         val pkg = field.packageName
-        val state = store.get(pkg) ?: return decide(pkg, "none", false)
+        val state = store.getForEnter(pkg) ?: return decide(pkg, "loading", false)
         val rule = state.rule
         val ruleLabel = rule.mode ?: resolveMode(rule).name
         val mode = resolveMode(rule)

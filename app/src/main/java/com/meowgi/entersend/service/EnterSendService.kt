@@ -74,6 +74,8 @@ class EnterSendService : AccessibilityService() {
         val a11y = A11yDevice(this).also { device = NoticeDevice(it, this) }
         val policy = SystemAppPolicy(this)
         val rules = RuleStore(app.db.rules(), app.io, { main.post(it) }, CropFiles(filesDir))
+        // Cache every stored rule before Enter can fire — no optimistic default over Off.
+        rules.preloadAll()
         val banner = A11yPromptBanner(this, main)
         val promptChooser = A11yPromptChooser(this, { store }, { teach }, main)
         attach(
@@ -150,6 +152,8 @@ class EnterSendService : AccessibilityService() {
         this.store = store
         this.policy = policy
         this.usage = UsageForeground(this)
+        // Unit tests / re-attach: ensure DB rows are cached (no-op if already preloaded).
+        store.preloadAll()
         this.chooser = chooser ?: A11yPromptChooser(this, { this.store }, { this.teach }, main)
         val prompt = notifier ?: NewAppNotifier(
             this, store, today, policy, banner = banner,
@@ -222,7 +226,11 @@ class EnterSendService : AccessibilityService() {
             -> onForegroundEvent(event)
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
-            -> event.packageName?.toString()?.let { teach?.onTextChanged(it) }
+            -> event.packageName?.toString()?.let {
+                // Warm Enter rules for the field's package (incl. our Setup screen).
+                store?.warm(it)
+                teach?.onTextChanged(it)
+            }
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ->
                 event.packageName?.toString()?.let { teach?.onContentChanged(it) }
             AccessibilityEvent.TYPE_VIEW_CLICKED -> if (teach?.isTeaching == true) {
@@ -240,9 +248,26 @@ class EnterSendService : AccessibilityService() {
 
     private fun onForegroundEvent(event: AccessibilityEvent) {
         val eventPkg = event.packageName?.toString()
+        // Enter warm for our own package (Setup test chat) without stealing prompt session.
+        if (eventPkg == packageName) {
+            store?.onForeground(packageName)
+            PromptDecisionLog.get(this).record(
+                eventPkg,
+                eventSource(event.eventType) + "/self-warm",
+                "enter-warm:self",
+            )
+        }
+        // Also warm whatever package owns the focused input — Enter must not depend on prompt FG.
+        try {
+            device?.focusedField()?.packageName?.let { focused ->
+                if (focused.isNotBlank()) store?.warm(focused)
+            }
+        } catch (_: Exception) {
+        }
+
         val resolved = resolveForeground(eventPkg) ?: run {
-            // IME / overlay / SystemUI / self — keep previous app; never clear.
-            if (!eventPkg.isNullOrBlank()) {
+            // IME / overlay / SystemUI / self — keep previous prompt app; never clear.
+            if (!eventPkg.isNullOrBlank() && eventPkg != packageName) {
                 PromptDecisionLog.get(this).record(
                     eventPkg,
                     eventSource(event.eventType) + "/ignored",

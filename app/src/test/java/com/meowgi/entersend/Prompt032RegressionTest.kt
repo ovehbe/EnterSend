@@ -246,8 +246,8 @@ class Prompt032RegressionTest {
         assertEquals(android.view.View.GONE, again.findViewById<android.view.View>(R.id.usage_access_card).visibility)
         assertTrue(PromptPrefs.usageFallbackEnabled(context()))
 
-        assertEquals("0.3.2", BuildConfig.VERSION_NAME)
-        assertEquals(9, BuildConfig.VERSION_CODE)
+        assertEquals("0.3.3", BuildConfig.VERSION_NAME)
+        assertEquals(10, BuildConfig.VERSION_CODE)
     }
 
     @Test fun noiseDoesNotClearCurrentApp() {
@@ -270,6 +270,46 @@ class Prompt032RegressionTest {
             isNoise = { it.contains("inputmethod") },
         )
         assertEquals(null, resolved)
+    }
+
+    @Test fun eventPackageBeatsImeRootLike024() {
+        // 0.2.4 used event.packageName; when windows are empty/late and root is IME,
+        // the WINDOW_STATE event still names the chat app.
+        val resolved = ForegroundPackage.resolve(
+            ownPackage = "com.meowgi.entersend",
+            eventPackage = CHAT,
+            rootPackage = "com.android.inputmethod.latin",
+            windows = emptyList(),
+            isNoise = { it.contains("inputmethod") },
+        )
+        assertEquals(CHAT, resolved!!.packageName)
+        assertEquals("event", resolved.source)
+    }
+
+    @Test fun enterWorksForOwnPackageWithoutPromptWarm() {
+        val store = RuleStore(db.rules(), delayedIo, direct, crops)
+        store.preloadAll()
+        flushIo()
+        val device = FakeDevice().apply {
+            field = chatField(
+                "setup",
+                pkg = context().packageName,
+                viewId = "${context().packageName}:id/message_input",
+                hint = "Type a test message",
+            )
+            root = window(
+                sendButton(
+                    viewId = "${context().packageName}:id/send_button",
+                    desc = "Send",
+                ),
+            )
+        }
+        val service = Robolectric.setupService(EnterSendService::class.java)
+        service.attach(device, store, FakeOverlay())
+        // Prompt path ignores self — must not prevent Setup Enter from sending.
+        service.foregroundProbe = { null }
+        assertEquals(listOf(true, true), service.press(4_000))
+        assertEquals(1, device.clicks.size)
     }
 
     private fun installLauncher(pkg: String) {
