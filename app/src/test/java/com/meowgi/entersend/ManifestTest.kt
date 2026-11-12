@@ -21,7 +21,11 @@ class ManifestTest {
     @Test fun noInternetAndOnlyExpectedPermissions() {
         val requested = info.requestedPermissions.orEmpty().toSet()
         assertFalse(android.Manifest.permission.INTERNET in requested)
-        assertEquals(emptySet<String>(), requested - ALLOWED)
+        // AndroidX may inject a package-private DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION.
+        val unexpected = requested.filterNot {
+            it in ALLOWED || it.endsWith(".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION")
+        }
+        assertEquals(emptyList<String>(), unexpected)
     }
 
     @Test fun backupIsDisabled() {

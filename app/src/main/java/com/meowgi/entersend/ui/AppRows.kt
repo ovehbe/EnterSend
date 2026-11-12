@@ -23,6 +23,10 @@ class AppRow(
     val mode: Mode,
     val isSystemApp: Boolean,
 ) {
+    /** Instant UI update after a Settings write, before the background reload finishes. */
+    fun withRule(rule: AppRule, mode: Mode = this.mode): AppRow =
+        AppRow(pkg, label, icon, rule, versionCode, mode, isSystemApp)
+
     val blocked: Boolean get() = pkg in AppLists.NEVER
 
     /** EnterSend has data for this app (a real DB row with user-visible state). */

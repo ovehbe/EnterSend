@@ -38,6 +38,13 @@
             android:label="@string/setup_title"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".ui.PromptActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:label="@string/prompt_title"
+            android:theme="@style/Theme.EnterSend.PromptDialog" />
+
         <service
             android:name=".service.EnterSendService"
             android:exported="false"

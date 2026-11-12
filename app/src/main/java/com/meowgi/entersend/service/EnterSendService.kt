@@ -23,6 +23,7 @@ class EnterSendService : AccessibilityService() {
     private var enter: EnterHandler? = null
     private var device: Device? = null
     private var notifier: NewAppNotifier? = null
+    private var lastWindowPkg: String? = null
     internal var teach: TeachFlow? = null
         private set
     internal var store: RuleStore? = null
@@ -47,17 +48,14 @@ class EnterSendService : AccessibilityService() {
         val a11y = A11yDevice(this).also { device = NoticeDevice(it, this) }
         val policy = SystemAppPolicy(this)
         val rules = RuleStore(app.db.rules(), app.io, { main.post(it) }, CropFiles(filesDir))
+        val banner = A11yPromptBanner(this, main)
         attach(
             a11y,
             rules,
             CardOverlay(this),
             policy = policy,
+            banner = banner,
         )
-        val prompt = NewAppNotifier(this, store!!, { LocalDate.now().toEpochDay() }, policy)
-        notifier = prompt
-        // Prompt once the rule finishes loading — avoids the race where WINDOW_STATE fires
-        // while RuleStore.refresh is still in flight and get() returns null.
-        store!!.setOnLoaded { pkg, state -> prompt.onAppSeen(pkg, state.rule) }
         instance = this
         ServiceWatch.updateNotice(this, running = true)
     }
@@ -85,12 +83,20 @@ class EnterSendService : AccessibilityService() {
         today: () -> Long = { LocalDate.now().toEpochDay() },
         notifier: NewAppNotifier? = null,
         policy: SystemAppPolicy = SystemAppPolicy(this),
+        banner: PromptBanner? = null,
     ) {
         teach?.forceClose()
         this.device = device
         this.store = store
-        this.notifier = notifier
-        store.setOnLoaded { pkg, state -> this.notifier?.onAppSeen(pkg, state.rule) }
+        val prompt = notifier ?: NewAppNotifier(
+            this, store, today, policy, banner = banner,
+        )
+        this.notifier = prompt
+        // Prompt once the rule finishes loading — avoids the race where WINDOW_STATE fires
+        // while RuleStore.refresh is still in flight and get() returns null.
+        store.setOnLoaded { pkg, state ->
+            if (pkg == lastWindowPkg) prompt.onAppSeen(pkg, state.rule)
+        }
         val teach = TeachFlow(device, store, overlay, main, today, ::versionOf) { getString(it) }
         this.teach = teach
         enter = EnterHandler(
@@ -127,7 +133,12 @@ class EnterSendService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                // Loads (or reloads) the rule; NewAppNotifier runs from RuleStore.onLoaded.
+                val previous = lastWindowPkg
+                if (previous != null && previous != pkg) {
+                    notifier?.onPackageLeft(previous)
+                }
+                lastWindowPkg = pkg
+                // Loads (or reloads) the rule; NewAppNotifier runs from onLoaded + below.
                 store?.onForeground(pkg)
                 store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule) }
             }

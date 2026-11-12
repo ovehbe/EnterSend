@@ -1,29 +1,83 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.EnterSend.Overlay" parent="android:Theme.DeviceDefault.DayNight" />
-
-    <style name="Theme.EnterSend" parent="android:Theme.DeviceDefault.DayNight">
-        <item name="android:buttonStyle">@style/Widget.EnterSend.Button</item>
-        <item name="android:checkboxStyle">@style/Widget.EnterSend.CheckBox</item>
-        <item name="android:editTextStyle">@style/Widget.EnterSend.EditText</item>
+    <style name="Theme.EnterSend" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/md_theme_primary</item>
+        <item name="colorOnPrimary">@color/md_theme_on_primary</item>
+        <item name="colorPrimaryContainer">@color/md_theme_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/md_theme_on_primary_container</item>
+        <item name="colorSecondary">@color/md_theme_secondary</item>
+        <item name="colorOnSecondary">@color/md_theme_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/md_theme_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/md_theme_on_secondary_container</item>
+        <item name="colorTertiary">@color/md_theme_tertiary</item>
+        <item name="colorOnTertiary">@color/md_theme_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/md_theme_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/md_theme_on_tertiary_container</item>
+        <item name="colorError">@color/md_theme_error</item>
+        <item name="colorOnError">@color/md_theme_on_error</item>
+        <item name="colorErrorContainer">@color/md_theme_error_container</item>
+        <item name="colorOnErrorContainer">@color/md_theme_on_error_container</item>
+        <item name="android:colorBackground">@color/md_theme_background</item>
+        <item name="colorOnBackground">@color/md_theme_on_background</item>
+        <item name="colorSurface">@color/md_theme_surface</item>
+        <item name="colorOnSurface">@color/md_theme_on_surface</item>
+        <item name="colorSurfaceVariant">@color/md_theme_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/md_theme_on_surface_variant</item>
+        <item name="colorOutline">@color/md_theme_outline</item>
+        <item name="colorOutlineVariant">@color/md_theme_outline_variant</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.EnterSend.MaterialAlertDialog</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
-    <style name="Widget.EnterSend.Button" parent="android:Widget.DeviceDefault.Button">
+    <style name="Theme.EnterSend.Overlay" parent="Theme.Material3.DayNight">
+        <item name="colorPrimary">@color/md_theme_primary</item>
+        <item name="colorOnPrimary">@color/md_theme_on_primary</item>
+        <item name="colorSurface">@color/md_theme_surface</item>
+        <item name="colorOnSurface">@color/md_theme_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/md_theme_on_surface_variant</item>
+        <item name="colorOutline">@color/md_theme_outline</item>
+    </style>
+
+    <style name="Theme.EnterSend.PromptDialog" parent="Theme.Material3.DayNight.Dialog">
+        <item name="colorPrimary">@color/md_theme_primary</item>
+        <item name="colorOnPrimary">@color/md_theme_on_primary</item>
+        <item name="colorSurface">@color/md_theme_surface</item>
+        <item name="colorOnSurface">@color/md_theme_on_surface</item>
+        <item name="android:windowMinWidthMajor">92%</item>
+        <item name="android:windowMinWidthMinor">92%</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+    </style>
+
+    <style name="ThemeOverlay.EnterSend.MaterialAlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.EnterSend.DialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.EnterSend.DialogButton</item>
+    </style>
+
+    <style name="Widget.EnterSend.DialogButton" parent="Widget.Material3.Button.TextButton.Dialog">
         <item name="android:foreground">@drawable/focus_ring</item>
     </style>
 
-    <style name="Widget.EnterSend.CheckBox" parent="android:Widget.DeviceDefault.CompoundButton.CheckBox">
+    <style name="Widget.EnterSend" parent="android:Widget" />
+
+    <style name="Widget.EnterSend.Focusable" parent="Widget.EnterSend">
         <item name="android:foreground">@drawable/focus_ring</item>
+        <item name="android:focusable">true</item>
     </style>
 
-    <style name="Widget.EnterSend.EditText" parent="android:Widget.DeviceDefault.EditText">
-        <item name="android:foreground">@drawable/focus_ring</item>
+    <style name="TextAppearance.EnterSend.Title" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.EnterSend.Section" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="SetupStepHeader">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">20dp</item>
+        <item name="android:layout_marginTop">4dp</item>
         <item name="android:orientation">horizontal</item>
         <item name="android:gravity">center_vertical</item>
     </style>
@@ -33,13 +87,14 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginEnd">8dp</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:textAppearance">?attr/textAppearanceTitleMedium</item>
     </style>
 
     <style name="SetupStepTitle">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:textAppearance">?android:attr/textAppearanceMedium</item>
+        <item name="android:textAppearance">?attr/textAppearanceTitleMedium</item>
         <item name="android:textStyle">bold</item>
     </style>
 
@@ -48,5 +103,6 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">4dp</item>
         <item name="android:layout_marginBottom">8dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodyMedium</item>
     </style>
 </resources>

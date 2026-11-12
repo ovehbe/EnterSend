@@ -13,14 +13,17 @@ import com.meowgi.entersend.data.DisplayMode
 class AppListAdapter(private val context: Context) : BaseAdapter() {
     private var rows: List<AppRow> = emptyList()
 
+    /** Skips [notifyDataSetChanged] when the visible content is unchanged (no jank). */
     fun submit(rows: List<AppRow>) {
+        if (sameContent(this.rows, rows)) return
         this.rows = rows
         notifyDataSetChanged()
     }
 
     override fun getCount() = rows.size
     override fun getItem(position: Int) = rows[position]
-    override fun getItemId(position: Int) = position.toLong()
+    override fun getItemId(position: Int) = rows[position].pkg.hashCode().toLong()
+    override fun hasStableIds() = true
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
         val v = convertView ?: LayoutInflater.from(context).inflate(R.layout.item_app, parent, false)
@@ -56,5 +59,24 @@ class AppListAdapter(private val context: Context) : BaseAdapter() {
             contentDescription = context.getString(desc, row.rule.successCount, row.rule.failureCount)
         }
         return v
+    }
+
+    companion object {
+        fun sameContent(a: List<AppRow>, b: List<AppRow>): Boolean {
+            if (a.size != b.size) return false
+            for (i in a.indices) {
+                val x = a[i]
+                val y = b[i]
+                if (x.pkg != y.pkg || x.label != y.label || x.mode != y.mode ||
+                    x.displayMode != y.displayMode || x.health != y.health ||
+                    x.needsRecheck != y.needsRecheck || x.needsTeaching != y.needsTeaching ||
+                    x.rule.successCount != y.rule.successCount ||
+                    x.rule.failureCount != y.rule.failureCount
+                ) {
+                    return false
+                }
+            }
+            return true
+        }
     }
 }

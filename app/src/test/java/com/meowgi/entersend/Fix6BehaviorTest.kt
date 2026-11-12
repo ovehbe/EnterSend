@@ -59,11 +59,9 @@ class Fix6BehaviorTest {
         val store = RuleStore(db.rules(), direct, direct, crops)
         val policy = SystemAppPolicy(context())
         val notifier = NewAppNotifier(context(), store, { day }, policy)
-        store.setOnLoaded { pkg, state -> notifier.onAppSeen(pkg, state.rule) }
 
         val service = Robolectric.setupService(EnterSendService::class.java)
         service.attach(FakeDevice(), store, FakeOverlay(), { day }, notifier, policy)
-        store.setOnLoaded { pkg, state -> notifier.onAppSeen(pkg, state.rule) }
 
         val nm = context().getSystemService(NotificationManager::class.java)
         val shadow = shadowOf(nm)
@@ -78,7 +76,7 @@ class Fix6BehaviorTest {
         assertEquals(1, shadow.size())
         assertEquals(day, store.get("com.example.chat")!!.rule.lastAskedDay)
 
-        // Same day — no second prompt.
+        // Same visit — session dedupe (not once-per-day).
         nm.cancelAll()
         service.onAccessibilityEvent(event)
         shadowOf(Looper.getMainLooper()).idle()
@@ -104,14 +102,18 @@ class Fix6BehaviorTest {
     }
 
     @Config(sdk = [33])
-    @Test fun missingNotificationPermissionDoesNotBurnAskDay() {
+    @Test fun missingNotificationPermissionFallsBackToBanner() {
         installLauncher("com.example.chat", system = false)
         val store = RuleStore(db.rules(), direct, direct, crops)
-        val notifier = NewAppNotifier(context(), store, { day }, SystemAppPolicy(context()))
-        // SDK 33 without granted POST_NOTIFICATIONS → canPost false
-        assertFalse(notifier.onAppSeen("com.example.chat", AppRule("com.example.chat")))
-        assertNull(store.get("com.example.chat")?.rule?.lastAskedDay)
-        assertNull(db.rules().get("com.example.chat")?.lastAskedDay)
+        val banner = com.meowgi.entersend.service.FakePromptBanner()
+        val notifier = NewAppNotifier(
+            context(), store, { day }, SystemAppPolicy(context()), banner = banner,
+        )
+        // SDK 33 without POST_NOTIFICATIONS → banner fallback, still marks asked for bookkeeping.
+        assertTrue(notifier.onAppSeen("com.example.chat", AppRule("com.example.chat")))
+        assertEquals(NewAppNotifier.Result.BANNER, notifier.lastResult)
+        assertEquals("com.example.chat", banner.last!!.pkg)
+        assertEquals(0, shadowOf(context().getSystemService(NotificationManager::class.java)).size())
     }
 
     // --- 2. Live config: Settings write visible to service without restart ---

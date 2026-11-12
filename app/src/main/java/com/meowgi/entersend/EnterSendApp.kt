@@ -2,6 +2,7 @@ package com.meowgi.entersend
 
 import android.app.Application
 import android.content.pm.PackageManager
+import com.google.android.material.color.DynamicColors
 import com.meowgi.entersend.data.AppDb
 import com.meowgi.entersend.data.CropFiles
 import java.io.File
@@ -16,6 +17,7 @@ class EnterSendApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        DynamicColors.applyToActivitiesIfAvailable(this)
         io.execute { removeUninstalled() }
         ServiceWatch.schedule(this)
     }

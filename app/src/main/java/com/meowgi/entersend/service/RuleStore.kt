@@ -130,7 +130,7 @@ class RuleStore(
     }
 
     fun markAsked(pkg: String, day: Long) {
-        update(pkg) { it.copy(lastAskedDay = day) }
+        putLocal((loaded[pkg]?.rule ?: AppRule(pkg)).copy(lastAskedDay = day))
         io.execute {
             dao.ensure(pkg)
             dao.setLastAsked(pkg, day)
@@ -138,15 +138,24 @@ class RuleStore(
     }
 
     fun decline(pkg: String) {
-        update(pkg) { it.copy(teachDeclined = true) }
+        putLocal((loaded[pkg]?.rule ?: AppRule(pkg)).copy(teachDeclined = true))
         io.execute {
             dao.ensure(pkg)
             dao.setDeclined(pkg)
         }
     }
 
+    /** Clears "don't ask again" so the next open can prompt. */
+    fun clearDeclined(pkg: String) {
+        putLocal((loaded[pkg]?.rule ?: AppRule(pkg)).copy(teachDeclined = false))
+        io.execute {
+            dao.ensure(pkg)
+            dao.clearDeclined(pkg)
+        }
+    }
+
     fun setOff(pkg: String) {
-        update(pkg) { it.copy(mode = Mode.OFF.name, teachDeclined = true) }
+        putLocal((loaded[pkg]?.rule ?: AppRule(pkg)).copy(mode = Mode.OFF.name, teachDeclined = true))
         io.execute {
             dao.ensure(pkg)
             dao.setOff(pkg)

@@ -44,6 +44,9 @@ interface RuleDao {
     @Query("UPDATE app_rules SET teachDeclined = 1 WHERE packageName = :pkg")
     fun setDeclined(pkg: String)
 
+    @Query("UPDATE app_rules SET teachDeclined = 0 WHERE packageName = :pkg")
+    fun clearDeclined(pkg: String)
+
     @Query("UPDATE app_rules SET mode = 'OFF', teachDeclined = 1 WHERE packageName = :pkg")
     fun setOff(pkg: String)
 

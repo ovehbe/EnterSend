@@ -1,10 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
     android:orientation="vertical">
 
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface"
+        android:minHeight="48dp"
+        app:title="@string/app_name"
+        app:titleCentered="false" />
+
+    <!-- Global banners stay in the hierarchy so existing tests can find them. -->
     <LinearLayout
         android:id="@+id/banner"
         android:layout_width="match_parent"
@@ -12,7 +23,8 @@
         android:background="@color/banner_off"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="12dp"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
         android:visibility="gone">
 
         <TextView
@@ -23,10 +35,12 @@
             android:textColor="@android:color/white"
             android:textStyle="bold" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/banner_fix"
+            style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:foreground="@drawable/focus_ring"
             android:text="@string/turn_on" />
     </LinearLayout>
 
@@ -37,7 +51,8 @@
         android:background="@color/health_mixed"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="12dp"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
         android:visibility="gone">
 
         <TextView
@@ -47,110 +62,359 @@
             android:text="@string/banner_notifications"
             android:textColor="@android:color/black" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/banner_notifications_fix"
+            style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:foreground="@drawable/focus_ring"
             android:text="@string/enable_notifications" />
     </LinearLayout>
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="12dp">
-
-        <EditText
-            android:id="@+id/search"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="@string/search_apps"
-            android:imeOptions="actionSearch"
-            android:importantForAutofill="no"
-            android:inputType="text"
-            android:nextFocusDown="@+id/needs_teaching"
-            android:singleLine="true" />
-
-        <Button
-            android:id="@+id/open_setup"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/open_setup" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="4dp">
-
-        <TextView
-            android:id="@+id/profile_label"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/profile_active_placeholder" />
-
-        <Button
-            android:id="@+id/profiles_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/profiles" />
-
-        <Button
-            android:id="@+id/export_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/export" />
-
-        <Button
-            android:id="@+id/import_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/import_config" />
-    </LinearLayout>
-
-    <CheckBox
-        android:id="@+id/needs_teaching"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:nextFocusDown="@+id/show_system_apps"
-        android:text="@string/filter_needs_teaching" />
-
-    <CheckBox
-        android:id="@+id/show_system_apps"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:nextFocusDown="@+id/apps"
-        android:text="@string/filter_show_system_apps" />
-
-    <FrameLayout
+    <ViewFlipper
+        android:id="@+id/pager"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:measureAllChildren="false">
 
-        <ListView
-            android:id="@+id/apps"
+        <!-- 0: Home / status -->
+        <ScrollView
+            android:id="@+id/page_home"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:drawSelectorOnTop="true"
-            android:listSelector="@drawable/focus_ring" />
+            android:fillViewport="true">
 
-        <TextView
-            android:id="@+id/empty"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/home_title"
+                    android:textAppearance="@style/TextAppearance.EnterSend.Title" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="12dp"
+                    android:text="@string/home_subtitle"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <LinearLayout
+                    android:id="@+id/status_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/status_card_bg"
+                    android:foreground="@drawable/focus_ring"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/status_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="@style/TextAppearance.EnterSend.Section" />
+
+                    <TextView
+                        android:id="@+id/status_body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/status_action"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:foreground="@drawable/focus_ring"
+                        android:text="@string/turn_on" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/profile_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/profile_active_placeholder"
+                    android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/open_setup"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/open_setup" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/home_goto_apps"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/home_manage_apps" />
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- 1: Apps -->
+        <LinearLayout
+            android:id="@+id/page_apps"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:gravity="center"
-            android:padding="24dp"
-            android:text="@string/loading_apps" />
-    </FrameLayout>
+            android:orientation="vertical"
+            android:paddingTop="4dp">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="12dp"
+                android:hint="@string/search_apps"
+                app:boxBackgroundMode="outline"
+                app:endIconMode="clear_text">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/search"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:foreground="@drawable/focus_ring"
+                    android:imeOptions="actionSearch"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:nextFocusDown="@+id/needs_teaching"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="8dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingVertical="4dp">
+
+                    <com.google.android.material.checkbox.MaterialCheckBox
+                        android:id="@+id/needs_teaching"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:foreground="@drawable/focus_ring"
+                        android:nextFocusDown="@+id/show_system_apps"
+                        android:text="@string/filter_needs_teaching" />
+
+                    <com.google.android.material.checkbox.MaterialCheckBox
+                        android:id="@+id/show_system_apps"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:foreground="@drawable/focus_ring"
+                        android:nextFocusDown="@+id/apps"
+                        android:text="@string/filter_show_system_apps" />
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <ListView
+                    android:id="@+id/apps"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:divider="@android:color/transparent"
+                    android:dividerHeight="0dp"
+                    android:drawSelectorOnTop="true"
+                    android:listSelector="@drawable/focus_ring"
+                    android:paddingBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:text="@string/loading_apps"
+                    android:textAppearance="?attr/textAppearanceBodyLarge"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <!-- 2: Profiles -->
+        <LinearLayout
+            android:id="@+id/page_profiles"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/profiles_title"
+                android:textAppearance="@style/TextAppearance.EnterSend.Title" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/profiles_blurb"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <ListView
+                android:id="@+id/profiles_list"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:drawSelectorOnTop="true"
+                android:listSelector="@drawable/focus_ring" />
+
+            <TextView
+                android:id="@+id/profiles_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="16dp"
+                android:text="@string/profiles_empty"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/profile_save_as"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:foreground="@drawable/focus_ring"
+                android:text="@string/profile_save_as" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/profile_rename"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/profile_rename" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/profile_delete"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/profile_delete" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 3: Settings -->
+        <ScrollView
+            android:id="@+id/page_settings"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/nav_settings"
+                    android:textAppearance="@style/TextAppearance.EnterSend.Title" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="12dp"
+                    android:text="@string/settings_blurb"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/prompts_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/setting_prompts_enabled" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:text="@string/setting_prompts_blurb"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/export_button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/export_config" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/import_button"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/import_config" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/settings_open_setup"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/open_setup" />
+
+                <!-- Hidden compatibility hooks for older profile menu entry points. -->
+                <View
+                    android:id="@+id/profiles_button"
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/settings_version"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
+        </ScrollView>
+    </ViewFlipper>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottom_nav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface"
+        app:itemActiveIndicatorStyle="@style/Widget.Material3.BottomNavigationView.ActiveIndicator"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/main_nav" />
 </LinearLayout>
