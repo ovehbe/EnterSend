@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">EnterSend</string>
+    <string name="a11y_summary">Enter gönderir, Shift+Enter yeni satır ekler</string>
+    <string name="a11y_description">EnterSend, fiziksel Enter tuşunun sohbet uygulamalarında gönder düğmesine basabilmesi için odaktaki metin alanını ve yanındaki düğmeleri okur. Shift+Enter yeni satır ekler. Arama çubuklarında, adres çubuklarında, şifre alanlarında, notlarda ve e-postada Enter her zamanki gibi çalışır. Hiçbir veri telefonunuzdan çıkmaz: EnterSend\'in internet erişimi yoktur.</string>
 </resources>

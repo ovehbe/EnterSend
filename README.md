@@ -5,7 +5,7 @@ In chat text fields, **Enter sends** the message and **Shift+Enter inserts a new
 
 - Package: `com.ovehbe.entersend`
 - Kotlin, Gradle, minSdk 29, targetSdk 35
-- No internet permission; all data stays on the device.
+- No internet permission; the database and button screenshots are excluded from cloud backup and device transfer.
 
 ## Build
 
@@ -15,4 +15,54 @@ Requirements: JDK 17+ and an Android SDK with platform 35 (`ANDROID_HOME` set, o
 ./gradlew testDebugUnitTest assembleDebug
 ```
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+Unit tests run on the JVM with Robolectric (no device needed). The APK is written to
+`app/build/outputs/apk/debug/app-debug.apk`.
+
+## Install and enable
+
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Then open **Settings → Accessibility → EnterSend** and turn it on.
+
+## What Enter does
+
+When Enter is pressed (key repeats and duplicate events count as one press):
+
+1. Pass through unless the focused field is chat-like: not a password, URL, email, search or filter field,
+   not in a browser, notes or email app, and with a chat signal (a known messenger, a "short message" input
+   type, a message/chat-like view id or hint, or a field the user taught).
+2. Pass through if the app is set to **Off** or **Pass-through**. Apps where Enter already sends
+   (Discord, Slack, Teams) default to Pass-through.
+3. **Shift+Enter** inserts a newline at the cursor, replacing any selection.
+4. **Enter in an empty field** is swallowed and nothing is tapped (the send button is often a mic then).
+5. Otherwise find the send button, in this order:
+   1. the rule the user taught for this app (view id / text / content description, or class path at the taught spot);
+   2. auto-detect: a clickable node near the field labelled send (English or Turkish: Send, Gönder, …);
+   3. the saved tap spot: tapped only if orientation and window size match and a live screenshot of the spot
+      still matches the saved crop;
+   4. none found: Enter passes through.
+6. After a click, the field must empty within ~1.7 s to count as a success (short vibration); otherwise it
+   counts as a failure. While a send is unconfirmed, further Enter presses are swallowed.
+
+### Duplicate key events
+
+On the Q25 every physical press arrives twice: the real event and a zero-duration copy with deviceId -1
+about 15 ms later. `KeyGate` gives the copy the same answer as the real press (consumed or passed),
+so a press acts at most once. A deviceId -1 Enter with no real press nearby is passed through untouched.
+
+## Storage
+
+Room database `entersend.db`, schema v1, exported to `app/schemas/`. Every schema change needs a
+migration in `AppDb.MIGRATIONS` plus a test in `AppDbMigrationTest` that upgrades real saved data;
+destructive fallback is never enabled. Button crops are PNGs in app-private `files/crops/`. An app's rule
+is loaded into memory when the app comes to the foreground; counters are written on a background thread.
+Rules and crops of uninstalled apps are deleted when the app process starts.
+
+## Known limits
+
+- When a saved tap spot fails the live screenshot check after Enter was already taken, Enter is re-delivered
+  with the accessibility IME-Enter action. Standard Android text fields treat it like Enter; custom editors may not.
+- Screenshots need Android 11+; on Android 10 the tap-spot fallback is skipped.
+- Shift+Enter rewrites the field text through accessibility, so rich-text spans (e.g. @mentions) may be lost.

@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">EnterSend</string>
+    <string name="a11y_summary">Enter sends, Shift+Enter adds a new line</string>
+    <string name="a11y_description">EnterSend reads the focused text field and the buttons next to it so that the physical Enter key can press the send button in chat apps. Shift+Enter inserts a new line. In search bars, address bars, password fields, notes and email, Enter works as usual. Nothing leaves your phone: EnterSend has no internet access.</string>
 </resources>
