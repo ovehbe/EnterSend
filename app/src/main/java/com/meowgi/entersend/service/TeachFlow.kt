@@ -46,20 +46,34 @@ class TeachFlow(
 
     val isCapturing: Boolean get() = state is Capturing
 
-    /** Starts step 1: no overlay, wait for a real send click. */
+    /** Step 1: waiting for a real send tap, no overlay. Every new session starts here. */
+    val isStep1: Boolean get() = state is Listening
+
+    /** Step 2 instruction bar ("Didn't catch that…"). */
+    val isStep2Bar: Boolean get() = state is RetryBar
+
+    /**
+     * Starts a fresh teach session at step 1. Clears any prior step, timers, pending capture and
+     * marker — notification, Settings re-teach, Cancel/Esc/timeout and service restart all go
+     * through here so a session never resumes in step 2.
+     */
     fun startTeaching(pkg: String) {
-        clearTimeouts()
-        overlay.hide()
-        overlay.setTapListener(null)
+        resetSession()
         val listening = Listening(pkg)
         state = listening
-        main.postAtTime({ if (state === listening) enterStep2(pkg) }, step1Token, android.os.SystemClock.uptimeMillis() + STEP1_TIMEOUT_MS)
+        main.postAtTime(
+            { if (state === listening) enterStep2(pkg) },
+            step1Token,
+            android.os.SystemClock.uptimeMillis() + STEP1_TIMEOUT_MS,
+        )
         armSafetyTimeout(pkg)
     }
 
     fun offer(rule: AppRule) {
         // Prefer the notification path for new apps; keep a silent no-op if already asked/declined.
-        if (state !is Idle || rule.teachDeclined || rule.lastAskedDay == today()) return
+        // Always startTeaching (which resets) so we never resume a half-finished step-2 session.
+        if (rule.teachDeclined || rule.lastAskedDay == today()) return
+        if (state !is Idle) resetSession()
         startTeaching(rule.packageName)
         // Bookkeeping row only when we actually start teaching from a prompt — not for system defaults.
         store.markAsked(rule.packageName, today())
@@ -166,7 +180,18 @@ class TeachFlow(
         }
     }
 
-    fun forceClose() = finish()
+    fun forceClose() = resetSession()
+
+    /**
+     * Clears step, timers, capture listener, marker overlay and pending promote poll.
+     * Used on every session start and every session end (Cancel / Esc / timeout / restart).
+     */
+    private fun resetSession() {
+        clearTimeouts()
+        state = Idle
+        overlay.setTapListener(null)
+        overlay.hide()
+    }
 
     private fun enterStep2(pkg: String) {
         clearTimeouts()
@@ -256,11 +281,11 @@ class TeachFlow(
             orientation = null, windowWidth = null, windowHeight = null, keyboardShown = null,
         )
         store.saveTaught(rule, null)
+        clearTimeouts()
         state = Idle
         overlay.setTapListener(null)
         overlay.show(Card.Saved(target.desc ?: target.text, barEdge(field?.bounds, null)), onChoice)
         main.postDelayed({ if (state is Idle) overlay.hide() }, SAVED_MS)
-        clearTimeouts()
     }
 
     private fun saveCapture(capturing: Capturing) {
@@ -333,12 +358,7 @@ class TeachFlow(
         main.removeCallbacksAndMessages(promoteToken)
     }
 
-    private fun finish() {
-        clearTimeouts()
-        state = Idle
-        overlay.setTapListener(null)
-        overlay.hide()
-    }
+    private fun finish() = resetSession()
 
     companion object {
         const val STEP1_TIMEOUT_MS = 2_000L

@@ -137,6 +137,11 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
     private fun showCapture(card: Card.Capture, onChoice: (Choice) -> Unit) {
         val ctx = ContextThemeWrapper(service, R.style.Theme_EnterSend_Overlay)
         val root = FrameLayout(ctx)
+        // Must receive every screen pixel, including the send button above the IME.
+        root.fitsSystemWindows = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            root.setOnApplyWindowInsetsListener { _, _ -> WindowInsets.CONSUMED }
+        }
         root.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_UP) {
                 val (sx, sy) = ScreenCoords.fromTouch(e)
@@ -144,8 +149,9 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
                 android.util.Log.d(TAG, "tap raw=($sx,$sy) viewLocal=(${e.x.toInt()},${e.y.toInt()})")
                 tapListener?.invoke(sx, sy)
             }
-            true
+            true // consume — never forward to the app (Telegram was sending on pass-through)
         }
+        root.isClickable = true
         root.isFocusableInTouchMode = false
 
         if (card.markerX != null && card.markerY != null) {
@@ -237,14 +243,24 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 val bounds = wm.maximumWindowMetrics.bounds
-                return bounds.width() to bounds.height()
+                if (bounds.width() > 0 && bounds.height() > 0) {
+                    return bounds.width() to bounds.height()
+                }
             } catch (_: RuntimeException) {
             }
         }
-        val dm = DisplayMetrics()
+        val dm = service.resources.displayMetrics
+        if (dm.widthPixels > 0 && dm.heightPixels > 0) {
+            return dm.widthPixels to dm.heightPixels
+        }
+        val real = DisplayMetrics()
         @Suppress("DEPRECATION")
-        wm.defaultDisplay.getRealMetrics(dm)
-        return dm.widthPixels to dm.heightPixels
+        wm.defaultDisplay.getRealMetrics(real)
+        if (real.widthPixels > 0 && real.heightPixels > 0) {
+            return real.widthPixels to real.heightPixels
+        }
+        // Last resort (broken metrics / some Robolectric shadows): MATCH_PARENT.
+        return ViewGroup.LayoutParams.MATCH_PARENT to ViewGroup.LayoutParams.MATCH_PARENT
     }
 
     private fun systemBarInsets(): IntArray {
@@ -265,19 +281,34 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
         return out
     }
 
-    private fun fullBleedLp() = baseLp(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        ViewGroup.LayoutParams.MATCH_PARENT,
-    ).apply {
-        gravity = Gravity.TOP or Gravity.START
-        x = 0
-        y = 0
-        flags = flags or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            layoutInDisplayCutoutMode =
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+    /**
+     * Full-display capture window. Explicit pixel size from [WindowManager.getMaximumWindowMetrics]
+     * (not MATCH_PARENT alone), zero fit-insets, no NOT_TOUCH_MODAL / NOT_TOUCHABLE — otherwise
+     * Android R+ shrinks the touchable region above the IME and taps on the send button pass through.
+     */
+    private fun fullBleedLp(): WindowManager.LayoutParams {
+        val (w, h) = displaySize()
+        return WindowManager.LayoutParams(
+            w, h,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            // NOT_FOCUSABLE only — never NOT_TOUCH_MODAL / NOT_TOUCHABLE on capture.
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = 0
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Critical: default fitInsetsTypes includes IME/systemBars and punches a hole
+                // over the bottom input / send-button region on Q25-class devices.
+                fitInsetsTypes = 0
+            }
         }
     }
 

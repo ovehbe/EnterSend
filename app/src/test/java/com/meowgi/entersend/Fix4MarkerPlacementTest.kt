@@ -99,8 +99,14 @@ class Fix4MarkerPlacementTest {
         assertTrue(wlp.flags and WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS != 0)
         assertEquals(0, wlp.x)
         assertEquals(0, wlp.y)
-        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, wlp.width)
-        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, wlp.height)
+        // Explicit full-display pixels (not MATCH_PARENT) so R+ fit-insets cannot shrink the window.
+        assertTrue("width=${wlp.width}", wlp.width > 0)
+        assertTrue("height=${wlp.height}", wlp.height > 0)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            assertEquals(0, wlp.fitInsetsTypes)
+        }
+        assertEquals(0, wlp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
+        assertEquals(0, wlp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
 
         assertNotNull(overlay.lastDebugLine)
         assertTrue(overlay.lastDebugLine!!.contains("mk=$tapX,$tapY"))
