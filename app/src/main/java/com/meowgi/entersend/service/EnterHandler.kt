@@ -8,22 +8,23 @@ import com.meowgi.entersend.core.CropMatch
 import com.meowgi.entersend.core.Field
 import com.meowgi.entersend.core.Pixels
 import com.meowgi.entersend.core.SendFinder
+import com.meowgi.entersend.core.TapSpot
 import com.meowgi.entersend.core.insertNewline
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.Mode
 
 /**
  * Decides what a fresh Enter / Shift+Enter press does. Returns true when the key is consumed.
- * Runs on the main thread and only reads memory.
+ * Order: learned node → auto-detect → coordinate tap → pass through. One attempt per press.
  */
 class EnterHandler(
     private val device: Device,
     private val store: RuleStore,
     private val main: Handler,
-    /** Called when a chat field has no working send rule, to offer teaching. */
     private val offerTeach: (AppRule) -> Unit,
+    private val debug: Boolean = false,
+    private val strings: (Int) -> String = { "" },
 ) {
-    /** Set while a send is waiting for the field to empty; further Enters are swallowed. */
     private var inFlight: Any? = null
 
     fun onEnter(e: KeyEvent): Boolean {
@@ -44,52 +45,61 @@ class EnterHandler(
         if (inFlight != null) return true
 
         val root = device.windowRoot(field) ?: return false
-        val learned = if (mode == Mode.LEARNED) SendFinder.learned(root, field, rule) else null
+        val learned = if (rule.hasNodeRule) SendFinder.learned(root, field, rule) else null
         val node = learned ?: SendFinder.auto(root, field)
         if (node != null) {
             if (!device.click(node)) return false
-            verify(field)
+            if (debug) device.notice(strings(com.meowgi.entersend.R.string.debug_send_button))
+            verify(field, viaTap = false)
             return true
         }
-        if (mode == Mode.LEARNED && rule.hasTapSpot) return tapSpot(field, rule, state.crop)
+
+        if (rule.hasTapSpot) {
+            if (rule.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                offerTeach(rule)
+                return false
+            }
+            return tapSpot(field, rule, state.crop)
+        }
+
         offerTeach(rule)
         return false
     }
 
-    /**
-     * Taps the saved spot only if orientation and window size still match (checked now, so a
-     * mismatch passes the real Enter through) and a live screenshot of the spot still matches the
-     * saved crop (checked asynchronously; a mismatch delivers Enter via the IME action instead).
-     */
     private fun tapSpot(field: Field, rule: AppRule, crop: Pixels?): Boolean {
         val ws = device.windowState(field) ?: return false
-        if (crop == null || ws.orientation != rule.orientation || ws.width != rule.windowWidth || ws.height != rule.windowHeight) {
+        val point = TapSpot.resolve(rule, field, ws, ws.density, ws.keyboardShown)
+        if (point == null || !TapSpot.isSafe(point, ws, field)) {
+            store.markNeedsRecheck(rule.packageName)
+            offerTeach(rule)
+            return false
+        }
+        if (crop == null || rule.cropLeft == null) {
             offerTeach(rule)
             return false
         }
         val token = Any()
         inFlight = token
-        val rect = Box(rule.cropLeft!!, rule.cropTop!!, rule.cropRight!!, rule.cropBottom!!)
+        val rect = Box(rule.cropLeft, rule.cropTop!!, rule.cropRight!!, rule.cropBottom!!)
         device.capture(rect) { live ->
             if (inFlight !== token) return@capture
             if (live != null && CropMatch.matches(crop, live)) {
-                device.tap(rule.tapX!!, rule.tapY!!)
-                verify(field, token)
+                device.tap(point.first, point.second)
+                if (debug) device.notice(strings(com.meowgi.entersend.R.string.debug_send_tap))
+                verify(field, viaTap = true, token = token)
             } else {
                 inFlight = null
-                device.imeEnter(field)
+                store.markNeedsRecheck(rule.packageName)
+                device.imeEnter(field) // key was already consumed; re-deliver as IME Enter
                 offerTeach(rule)
             }
         }
         return true
     }
 
-    private fun verify(field: Field, token: Any = Any()) {
+    private fun verify(field: Field, viaTap: Boolean, token: Any = Any()) {
         inFlight = token
-        check(field, token, 0)
-    }
-
-    private fun check(field: Field, token: Any, step: Int) {
+        // Success = box empty within ~500 ms.
         main.postDelayed({
             if (inFlight !== token) return@postDelayed
             val text = device.readText(field)
@@ -100,16 +110,21 @@ class EnterHandler(
                     store.recordResult(field.packageName, true)
                     device.vibrate()
                 }
-                step == VERIFY_DELAYS_MS.lastIndex -> {
+                else -> {
                     inFlight = null
                     store.recordResult(field.packageName, false)
+                    device.notice(strings(com.meowgi.entersend.R.string.send_failed))
+                    val failures = store.get(field.packageName)?.rule?.consecutiveFailures ?: 0
+                    if (viaTap && failures >= MAX_CONSECUTIVE_FAILURES) {
+                        offerTeach(store.get(field.packageName)?.rule ?: AppRule(field.packageName))
+                    }
                 }
-                else -> check(field, token, step + 1)
             }
-        }, VERIFY_DELAYS_MS[step])
+        }, VERIFY_MS)
     }
 
     companion object {
-        val VERIFY_DELAYS_MS = longArrayOf(150, 250, 500, 800)
+        const val VERIFY_MS = 500L
+        const val MAX_CONSECUTIVE_FAILURES = 3
     }
 }

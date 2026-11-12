@@ -8,7 +8,7 @@ import android.widget.BaseAdapter
 import android.widget.ImageView
 import android.widget.TextView
 import com.meowgi.entersend.R
-import com.meowgi.entersend.data.Mode
+import com.meowgi.entersend.data.DisplayMode
 
 class AppListAdapter(private val context: Context) : BaseAdapter() {
     private var rows: List<AppRow> = emptyList()
@@ -29,12 +29,13 @@ class AppListAdapter(private val context: Context) : BaseAdapter() {
         v.findViewById<TextView>(R.id.app_name).text = row.label
 
         val mode = context.getString(
-            when {
-                row.blocked -> R.string.mode_never
-                row.mode == Mode.AUTO -> R.string.mode_auto
-                row.mode == Mode.LEARNED -> R.string.mode_learned
-                row.mode == Mode.OFF -> R.string.mode_off
-                else -> R.string.mode_pass_through
+            when (row.rule.displayMode) {
+                DisplayMode.NEVER -> R.string.mode_never
+                DisplayMode.OFF -> R.string.mode_off
+                DisplayMode.PASS_THROUGH -> R.string.mode_pass_through
+                DisplayMode.BUTTON -> R.string.mode_button
+                DisplayMode.TAP_SPOT -> R.string.mode_tap_spot
+                DisplayMode.AUTO -> R.string.mode_auto
             },
         )
         val notes = listOfNotNull(

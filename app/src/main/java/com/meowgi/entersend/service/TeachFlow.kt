@@ -1,20 +1,22 @@
 package com.meowgi.entersend.service
 
-import android.content.Context
 import android.os.Handler
 import android.view.KeyEvent
 import com.meowgi.entersend.R
 import com.meowgi.entersend.core.Box
 import com.meowgi.entersend.core.NodeSnap
 import com.meowgi.entersend.core.Pixels
-import com.meowgi.entersend.core.WindowState
+import com.meowgi.entersend.core.SendFinder
+import com.meowgi.entersend.core.TapSpot
 import com.meowgi.entersend.data.AppRule
 
 /**
- * Ask card -> teaching bar -> "Is this the send button?" -> saved rule.
- *
- * Keys while the ask or confirm card is up: Alt+Y = yes, Alt+N = no, Esc = close.
- * Plain letters always reach the app; typing while the ask card is up hides it ("ask later").
+ * Two-step teach (Ömer's flow):
+ * 1. No overlay — user taps the real send button. Usable node → save immediately + "Saved".
+ * 2. If nothing usable within [STEP1_TIMEOUT_MS], show a bar. When the text box is non-empty
+ *    again, show a transparent full-screen capture overlay; the tap is consumed (nothing sent).
+ *    Screenshot is taken while the overlay is transparent, then a marker is drawn.
+ *    Done (Alt+Y) saves; Retry moves the marker; Esc/Back/30s timeout cancel.
  */
 class TeachFlow(
     private val device: Device,
@@ -27,136 +29,253 @@ class TeachFlow(
 ) {
     private sealed interface State
     private data object Idle : State
-    private class Asking(val pkg: String) : State
-    private class Teaching(val pkg: String) : State {
-        var shot: Pixels? = null
-    }
-    private class Confirming(val pkg: String, val rule: AppRule, val crop: Pixels?) : State
+    private class Listening(val pkg: String) : State
+    private class RetryBar(val pkg: String) : State
+    private class Capturing(val pkg: String, var markerX: Int? = null, var markerY: Int? = null, var crop: Pixels? = null) : State
+    private class Confirming(val pkg: String, val rule: AppRule, val crop: Pixels?) : State // legacy confirm
 
     private var state: State = Idle
-    private var onChoice: ((Choice) -> Unit) = ::handleChoice
+    private val onChoice: (Choice) -> Unit = ::handleChoice
+    private val step1Token = Any()
 
-    val isTeaching get() = state is Teaching || state is Confirming
+    val isTeaching: Boolean
+        get() = state is Listening || state is RetryBar || state is Capturing || state is Confirming
 
-    /** Called when Enter found no working rule in a chat field of [rule]'s app. */
-    fun offer(rule: AppRule) {
-        if (state !is Idle || rule.teachDeclined || rule.lastAskedDay == today()) return
-        val asking = Asking(rule.packageName)
-        state = asking
-        store.markAsked(rule.packageName, today())
-        overlay.show(Card.Ask(reteach = rule.isTaught), onChoice)
-        main.postDelayed({ if (state === asking) finish() }, ASK_TIMEOUT_MS)
-    }
+    val isCapturing: Boolean get() = state is Capturing
 
-    /** Starts teaching directly (from Settings or after "yes"). */
+    /** Starts step 1: no overlay, wait for a real send click. */
     fun startTeaching(pkg: String) {
-        val teaching = Teaching(pkg)
-        state = teaching
-        overlay.show(Card.Teaching(), onChoice)
-        main.postDelayed({ captureFor(teaching) }, SHOT_DELAY_MS)
-        main.postDelayed({ if (state === teaching) finish() }, TEACH_TIMEOUT_MS)
+        clearTimeouts()
+        overlay.hide()
+        overlay.setTapListener(null)
+        val listening = Listening(pkg)
+        state = listening
+        main.postAtTime({ if (state === listening) enterStep2(pkg) }, step1Token, android.os.SystemClock.uptimeMillis() + STEP1_TIMEOUT_MS)
+        armSafetyTimeout(pkg)
     }
 
-    /** Fresh key press other than Enter. Returns true to consume it. */
+    fun offer(rule: AppRule) {
+        // Prefer the notification path for new apps; keep a silent no-op if already asked/declined.
+        if (state !is Idle || rule.teachDeclined || rule.lastAskedDay == today()) return
+        startTeaching(rule.packageName)
+        store.markAsked(rule.packageName, today())
+    }
+
     fun onKey(e: KeyEvent): Boolean {
         if (state is Idle || isModifier(e.keyCode)) return false
-        val answerable = state is Asking || state is Confirming
         return when {
-            e.keyCode == KeyEvent.KEYCODE_ESCAPE -> { handleChoice(Choice.CLOSE); true }
-            answerable && e.isAltPressed && e.keyCode == KeyEvent.KEYCODE_Y -> { handleChoice(Choice.YES); true }
-            answerable && e.isAltPressed && e.keyCode == KeyEvent.KEYCODE_N -> { handleChoice(Choice.NO); true }
-            else -> {
-                if (state is Asking) finish()
-                false
+            e.keyCode == KeyEvent.KEYCODE_ESCAPE || e.keyCode == KeyEvent.KEYCODE_BACK -> {
+                finish(); true
             }
+            (state is Capturing || state is Confirming) && e.isAltPressed && e.keyCode == KeyEvent.KEYCODE_Y -> {
+                handleChoice(Choice.YES); true
+            }
+            state is Capturing && e.isAltPressed && e.keyCode == KeyEvent.KEYCODE_N -> {
+                handleChoice(Choice.RETRY); true
+            }
+            else -> false
         }
     }
 
-    /** Enter was pressed: hides the ask card. Returns true if Enter must pass through untouched. */
     fun onEnter(): Boolean {
-        if (state is Asking) finish()
-        return isTeaching
+        return isTeaching // pass Enter through to the app while teaching
     }
 
     fun onTextChanged(pkg: String) {
-        val teaching = state as? Teaching ?: return
-        if (teaching.pkg != pkg) return
-        main.removeCallbacksAndMessages(teaching)
-        main.postAtTime({ captureFor(teaching) }, teaching, android.os.SystemClock.uptimeMillis() + SHOT_DELAY_MS)
+        val bar = state as? RetryBar ?: return
+        if (bar.pkg != pkg) return
+        val field = device.focusedField()?.takeIf { it.packageName == pkg } ?: return
+        if (field.text.isNotBlank()) showCapture(pkg)
     }
 
-    /** The user tapped [node] in [pkg] while the teaching bar was up. */
     fun onClicked(pkg: String, node: NodeSnap) {
-        val teaching = state as? Teaching ?: return
-        if (teaching.pkg != pkg || node.editable) return
+        when (val s = state) {
+            is Listening -> {
+                if (s.pkg != pkg || node.editable) return
+                if (usableSend(node)) {
+                    saveNodeRule(pkg, node)
+                } else {
+                    // First tap wasn't a readable send node — step 2.
+                    enterStep2(pkg)
+                }
+            }
+            is RetryBar, is Capturing -> Unit // capture overlay consumes the teach tap itself
+            else -> Unit
+        }
+    }
+
+    fun onMissedClick() {
+        val s = state
+        if (s is Listening) enterStep2(s.pkg)
+    }
+
+    /** Screen tap on the transparent capture overlay. */
+    fun onCaptureTap(x: Int, y: Int) {
+        val capturing = state as? Capturing ?: return
+        val field = device.focusedField()?.takeIf { it.packageName == capturing.pkg }
+        if (field == null || field.text.isBlank()) {
+            // Never save a tap spot from an empty box.
+            overlay.show(Card.Capture(null, null, strings(R.string.teach_need_text)), onChoice)
+            return
+        }
+        val ws = device.windowState(field) ?: return
+        if (!TapSpot.isSafe(x to y, ws, field)) return
+
+        // Remove overlay so the crop isn't polluted, screenshot, then show marker.
+        overlay.setTapListener(null)
+        overlay.hide()
+        val cropRect = TapSpot.cropBox(x, y, ws)
+        device.capture(cropRect) { pixels ->
+            if (state !is Capturing || (state as Capturing).pkg != capturing.pkg) return@capture
+            capturing.markerX = x
+            capturing.markerY = y
+            capturing.crop = pixels
+            overlay.show(Card.Capture(x, y, strings(R.string.teach_capture_keys)), onChoice)
+            overlay.setTapListener { nx, ny -> onCaptureTap(nx, ny) } // Retry by tapping again
+        }
+    }
+
+    fun forceClose() = finish()
+
+    private fun enterStep2(pkg: String) {
+        clearTimeouts()
+        state = RetryBar(pkg)
+        overlay.setTapListener(null)
+        overlay.show(Card.TeachingBar(strings(R.string.teach_step2)), onChoice)
+        armSafetyTimeout(pkg)
+        // If text is already non-empty, open capture immediately.
         val field = device.focusedField()?.takeIf { it.packageName == pkg }
-        val window: WindowState? = field?.let(device::windowState)
-        val crop = teaching.shot?.crop(node.bounds)
-        val b = crop?.let { node.bounds.clipTo(teaching.shot!!) }
+        if (field != null && field.text.isNotBlank()) showCapture(pkg)
+    }
+
+    private fun showCapture(pkg: String) {
+        val capturing = Capturing(pkg)
+        state = capturing
+        overlay.show(Card.Capture(null, null, strings(R.string.teach_tap_send_spot)), onChoice)
+        overlay.setTapListener { x, y -> onCaptureTap(x, y) }
+        armSafetyTimeout(pkg)
+    }
+
+    private fun usableSend(node: NodeSnap): Boolean {
+        if (!node.visible || !node.enabled || node.editable) return false
+        if (node.clickable || node.parent?.clickable == true) {
+            return SendFinder.looksLikeSend(node) ||
+                node.viewId != null || node.desc != null || node.text != null || node.className != null
+        }
+        return false
+    }
+
+    private fun saveNodeRule(pkg: String, node: NodeSnap) {
+        val field = device.focusedField()?.takeIf { it.packageName == pkg }
+        val target = node
         val old = store.get(pkg)?.rule ?: AppRule(pkg)
         val rule = old.copy(
             mode = null,
             teachDeclined = false,
             successCount = 0,
             failureCount = 0,
+            consecutiveFailures = 0,
+            needsRecheck = false,
             taughtVersionCode = versionOf(pkg),
             fieldViewId = field?.viewId,
-            sendViewId = node.viewId,
-            sendText = node.text,
-            sendDesc = node.desc,
-            sendClassPath = node.classPath,
-            tapX = node.bounds.centerX.takeIf { b != null && window != null },
-            tapY = node.bounds.centerY.takeIf { b != null && window != null },
-            cropLeft = b?.left, cropTop = b?.top, cropRight = b?.right, cropBottom = b?.bottom,
-            orientation = window?.orientation,
-            windowWidth = window?.width,
-            windowHeight = window?.height,
+            sendViewId = target.viewId,
+            sendText = target.text,
+            sendDesc = target.desc,
+            sendClassPath = target.classPath,
+            // Clear tap-spot fields when a node rule is enough.
+            tapX = null, tapY = null, tapDxDp = null, tapDyDp = null, tapFx = null, tapFy = null,
+            cropPath = null, cropLeft = null, cropTop = null, cropRight = null, cropBottom = null,
+            orientation = null, windowWidth = null, windowHeight = null, keyboardShown = null,
         )
-        state = Confirming(pkg, rule, crop)
-        overlay.show(Card.Confirm(crop, node.desc ?: node.text), onChoice)
+        store.saveTaught(rule, null)
+        state = Idle
+        overlay.setTapListener(null)
+        overlay.show(Card.Saved(target.desc ?: target.text), onChoice)
+        main.postDelayed({ if (state is Idle) overlay.hide() }, SAVED_MS)
+        clearTimeouts()
     }
 
-    /** Click event arrived but the node wasn't readable — show a visible error, don't fail silently. */
-    fun onMissedClick() {
-        if (state !is Teaching) return
-        overlay.show(Card.Teaching(status = strings(R.string.card_missed_tap)), onChoice)
+    private fun saveCapture(capturing: Capturing) {
+        val x = capturing.markerX ?: return
+        val y = capturing.markerY ?: return
+        val crop = capturing.crop ?: return
+        val field = device.focusedField()?.takeIf { it.packageName == capturing.pkg }
+        if (field == null || field.text.isBlank()) return // never save from empty box
+        val ws = device.windowState(field) ?: return
+        val density = ws.density
+        val old = store.get(capturing.pkg)?.rule ?: AppRule(capturing.pkg)
+        val cropRect = TapSpot.cropBox(x, y, ws)
+        val rule = old.copy(
+            mode = null,
+            teachDeclined = false,
+            successCount = 0,
+            failureCount = 0,
+            consecutiveFailures = 0,
+            needsRecheck = false,
+            taughtVersionCode = versionOf(capturing.pkg),
+            fieldViewId = field.viewId,
+            sendViewId = null, sendText = null, sendDesc = null, sendClassPath = null,
+            tapX = x, tapY = y,
+            tapDxDp = TapSpot.dxDp(field.bounds, x, density),
+            tapDyDp = TapSpot.dyDp(field.bounds, y, density),
+            tapFx = TapSpot.fx(ws, x),
+            tapFy = TapSpot.fy(ws, y),
+            cropLeft = cropRect.left, cropTop = cropRect.top,
+            cropRight = cropRect.right, cropBottom = cropRect.bottom,
+            orientation = ws.orientation,
+            windowWidth = ws.width,
+            windowHeight = ws.height,
+            keyboardShown = ws.keyboardShown,
+        )
+        store.saveTaught(rule, crop)
+        finish()
     }
 
     private fun handleChoice(choice: Choice) {
         when (val s = state) {
-            is Asking -> when (choice) {
-                Choice.YES -> startTeaching(s.pkg)
-                Choice.NO -> { store.decline(s.pkg); finish() }
-                Choice.CLOSE -> finish()
+            is Capturing -> when (choice) {
+                Choice.YES -> saveCapture(s)
+                Choice.RETRY -> {
+                    s.markerX = null; s.markerY = null; s.crop = null
+                    overlay.show(Card.Capture(null, null, strings(R.string.teach_tap_send_spot)), onChoice)
+                    overlay.setTapListener { x, y -> onCaptureTap(x, y) }
+                }
+                Choice.CLOSE, Choice.NO -> finish()
             }
-            is Teaching -> if (choice == Choice.CLOSE) finish()
+            is RetryBar -> if (choice == Choice.CLOSE) finish()
             is Confirming -> when (choice) {
                 Choice.YES -> { store.saveTaught(s.rule, s.crop); finish() }
-                Choice.NO -> startTeaching(s.pkg)
+                Choice.NO, Choice.RETRY -> startTeaching(s.pkg)
                 Choice.CLOSE -> finish()
             }
+            is Listening -> if (choice == Choice.CLOSE) finish()
             Idle -> Unit
         }
     }
 
-    private fun captureFor(teaching: Teaching) {
-        if (state !== teaching) return
-        device.capture(FULL_SCREEN) { shot -> if (shot != null) teaching.shot = shot }
+    private val safetyRunnable = Runnable { if (isTeaching) finish() }
+
+    private fun armSafetyTimeout(pkg: String) {
+        main.removeCallbacks(safetyRunnable)
+        main.postDelayed(safetyRunnable, SAFETY_TIMEOUT_MS)
+    }
+
+    private fun clearTimeouts() {
+        main.removeCallbacks(safetyRunnable)
+        main.removeCallbacksAndMessages(step1Token)
     }
 
     private fun finish() {
+        clearTimeouts()
         state = Idle
+        overlay.setTapListener(null)
         overlay.hide()
     }
 
-    private fun Box.clipTo(p: Pixels) =
-        Box(left.coerceIn(0, p.width), top.coerceIn(0, p.height), right.coerceIn(0, p.width), bottom.coerceIn(0, p.height))
-
     companion object {
-        const val ASK_TIMEOUT_MS = 8_000L
-        const val TEACH_TIMEOUT_MS = 120_000L
-        const val SHOT_DELAY_MS = 400L
-        private val FULL_SCREEN = Box(0, 0, Int.MAX_VALUE, Int.MAX_VALUE)
+        const val STEP1_TIMEOUT_MS = 2_000L
+        const val SAFETY_TIMEOUT_MS = 30_000L
+        const val SAVED_MS = 1_500L
 
         private val MODIFIERS = setOf(
             KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.KEYCODE_SHIFT_RIGHT,
@@ -167,8 +286,5 @@ class TeachFlow(
         )
 
         fun isModifier(code: Int) = code in MODIFIERS
-
-        fun withContext(context: Context, device: Device, store: RuleStore, overlay: Overlay, main: Handler, today: () -> Long, versionOf: (String) -> Long?) =
-            TeachFlow(device, store, overlay, main, today, versionOf) { context.getString(it) }
     }
 }

@@ -35,7 +35,7 @@ class EnterKeyServiceTest {
     private fun start(crops: Map<String, com.meowgi.entersend.core.Pixels> = emptyMap()): EnterSendService =
         service(device, db, FakeCrops(crops))
 
-    private fun settle() = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(3))
+    private fun settle() = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
 
     private fun rule(pkg: String) = db.rules().get(pkg)!!
 
@@ -361,7 +361,7 @@ class EnterKeyServiceTest {
     @Test fun tapSpotPassesThroughWhenOrientationChanged() {
         tapSpotScene()
         device.live = crop
-        device.window = WindowState(2, 720, 720)
+        device.window = WindowState(2, 720, 720, false, 1f)
         assertEquals(listOf(false, false), start(mapOf("/crops/a.png" to crop)).press(1000))
         assertEquals(0, device.captures)
         assertTrue(device.taps.isEmpty())
@@ -370,7 +370,7 @@ class EnterKeyServiceTest {
     @Test fun tapSpotPassesThroughWhenWindowSizeChanged() {
         tapSpotScene()
         device.live = crop
-        device.window = WindowState(1, 720, 400) // split screen
+        device.window = WindowState(1, 720, 400, false, 1f) // split screen
         assertEquals(listOf(false, false), start(mapOf("/crops/a.png" to crop)).press(1000))
         assertTrue(device.taps.isEmpty())
     }

@@ -39,10 +39,11 @@ class AppRow(
             }
         }
 
-    /** The app was updated since it was taught. */
+    /** The app was updated since it was taught, or a tap-spot crop no longer matches. */
     val needsRecheck: Boolean
-        get() = rule.isTaught && rule.taughtVersionCode != null && versionCode != null &&
-            versionCode != rule.taughtVersionCode
+        get() = rule.needsRecheck ||
+            (rule.isTaught && rule.taughtVersionCode != null && versionCode != null &&
+                versionCode != rule.taughtVersionCode)
 
     val needsTeaching: Boolean
         get() {

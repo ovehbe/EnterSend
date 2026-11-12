@@ -55,6 +55,10 @@
             android:name=".ServiceWatch$CheckJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <receiver
+            android:name=".service.NotifyActionReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

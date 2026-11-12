@@ -59,7 +59,14 @@ class NodeSnap(
     fun flatten(): List<NodeSnap> = listOf(this) + children.flatMap { it.flatten() }
 }
 
-data class WindowState(val orientation: Int, val width: Int, val height: Int)
+data class WindowState(
+    val orientation: Int,
+    val width: Int,
+    val height: Int,
+    val keyboardShown: Boolean = false,
+    /** Display density (dpi/160), used to convert dp anchors to pixels. */
+    val density: Float = 1f,
+)
 
 class Pixels(val width: Int, val height: Int, val argb: IntArray) {
     /** The part of this image inside [box]; null if they don't overlap. */

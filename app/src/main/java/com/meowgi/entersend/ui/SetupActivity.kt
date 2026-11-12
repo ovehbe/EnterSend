@@ -1,6 +1,9 @@
 package com.meowgi.entersend.ui
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -29,6 +32,13 @@ class SetupActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_setup)
         input = findViewById(R.id.message_input)
+
+        // Ask for teach-prompt notifications during first-run setup (Android 13+).
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
+        }
 
         findViewById<View>(R.id.step1_button).setOnClickListener { ServiceWatch.openAccessibilitySettings(this) }
 

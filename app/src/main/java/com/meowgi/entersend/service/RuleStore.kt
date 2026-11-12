@@ -3,6 +3,7 @@ package com.meowgi.entersend.service
 import com.meowgi.entersend.core.Pixels
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.Crops
+import com.meowgi.entersend.data.Mode
 import com.meowgi.entersend.data.RuleDao
 import java.util.concurrent.Executor
 
@@ -46,10 +47,24 @@ class RuleStore(
     }
 
     fun recordResult(pkg: String, success: Boolean) {
-        update(pkg) { if (success) it.copy(successCount = it.successCount + 1) else it.copy(failureCount = it.failureCount + 1) }
+        update(pkg) {
+            if (success) {
+                it.copy(successCount = it.successCount + 1, consecutiveFailures = 0, needsRecheck = false)
+            } else {
+                it.copy(failureCount = it.failureCount + 1, consecutiveFailures = it.consecutiveFailures + 1)
+            }
+        }
         io.execute {
             dao.ensure(pkg)
             if (success) dao.addSuccess(pkg) else dao.addFailure(pkg)
+        }
+    }
+
+    fun markNeedsRecheck(pkg: String) {
+        update(pkg) { it.copy(needsRecheck = true) }
+        io.execute {
+            dao.ensure(pkg)
+            dao.markNeedsRecheck(pkg)
         }
     }
 
@@ -69,12 +84,25 @@ class RuleStore(
         }
     }
 
+    fun setOff(pkg: String) {
+        update(pkg) { it.copy(mode = Mode.OFF.name, teachDeclined = true) }
+        io.execute {
+            dao.ensure(pkg)
+            dao.setOff(pkg)
+        }
+    }
+
     /** Saves a taught rule; [crop] replaces the old crop file. New file first, then DB, then delete old. */
     fun saveTaught(rule: AppRule, crop: Pixels?) {
         val pkg = rule.packageName
         io.execute {
             val previous = dao.get(pkg)?.cropPath
-            val saved = rule.copy(cropPath = crop?.let { crops.save(pkg, it) } ?: rule.cropPath)
+            val saved = rule.copy(
+                cropPath = crop?.let { crops.save(pkg, it) } ?: rule.cropPath,
+                consecutiveFailures = 0,
+                needsRecheck = false,
+                teachDeclined = false,
+            )
             dao.upsert(saved)
             if (previous != null && previous != saved.cropPath) crops.delete(previous)
             main.execute { loaded[pkg] = AppState(saved, crop ?: saved.cropPath?.let(crops::load)) }

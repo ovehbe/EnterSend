@@ -61,7 +61,7 @@ fun solid(color: Int, w: Int = 48, h: Int = 48) = Pixels(w, h, IntArray(w * h) {
 class FakeDevice : Device {
     var field: Field? = null
     var root: NodeSnap? = null
-    var window: WindowState? = WindowState(1, 720, 720)
+    var window: WindowState? = WindowState(1, 720, 720, keyboardShown = false, density = 1f)
     var live: Pixels? = null
     /** Field text after a click or tap; null means the app did not send. */
     var textAfterSend: String? = ""
@@ -71,6 +71,7 @@ class FakeDevice : Device {
     var captures = 0
     var imeEnters = 0
     var vibrations = 0
+    val notices = mutableListOf<String>()
 
     override fun focusedField() = field
     override fun windowRoot(field: Field) = root
@@ -107,6 +108,10 @@ class FakeDevice : Device {
         vibrations++
     }
 
+    override fun notice(message: String) {
+        notices += message
+    }
+
     private fun sent() {
         textAfterSend?.let { t -> field = field?.copy(text = t, selStart = t.length, selEnd = t.length) }
     }
@@ -129,11 +134,16 @@ class FakeOverlay : Overlay {
     var card: Card? = null
     val shown = mutableListOf<Card>()
     private var onChoice: ((Choice) -> Unit)? = null
+    private var onTap: ((Int, Int) -> Unit)? = null
 
     override fun show(card: Card, onChoice: (Choice) -> Unit) {
         this.card = card
         this.onChoice = onChoice
         shown += card
+    }
+
+    override fun setTapListener(listener: ((x: Int, y: Int) -> Unit)?) {
+        onTap = listener
     }
 
     override fun hide() {
@@ -143,6 +153,8 @@ class FakeOverlay : Overlay {
 
     /** Simulates a touch on one of the card's buttons. */
     fun tap(choice: Choice) = onChoice!!(choice)
+
+    fun screenTap(x: Int, y: Int) = onTap?.invoke(x, y)
 }
 
 fun service(

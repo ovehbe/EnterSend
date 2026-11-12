@@ -16,20 +16,36 @@ interface RuleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun upsert(rule: AppRule)
 
-    @Query("INSERT OR IGNORE INTO app_rules (packageName, teachDeclined, successCount, failureCount) VALUES (:pkg, 0, 0, 0)")
+    @Query(
+        "INSERT OR IGNORE INTO app_rules (packageName, teachDeclined, successCount, failureCount, consecutiveFailures, needsRecheck) " +
+            "VALUES (:pkg, 0, 0, 0, 0, 0)",
+    )
     fun ensure(pkg: String)
 
-    @Query("UPDATE app_rules SET successCount = successCount + 1 WHERE packageName = :pkg")
+    @Query(
+        "UPDATE app_rules SET successCount = successCount + 1, consecutiveFailures = 0, needsRecheck = 0 WHERE packageName = :pkg",
+    )
     fun addSuccess(pkg: String)
 
-    @Query("UPDATE app_rules SET failureCount = failureCount + 1 WHERE packageName = :pkg")
+    @Query(
+        "UPDATE app_rules SET failureCount = failureCount + 1, consecutiveFailures = consecutiveFailures + 1 WHERE packageName = :pkg",
+    )
     fun addFailure(pkg: String)
+
+    @Query("UPDATE app_rules SET consecutiveFailures = 0 WHERE packageName = :pkg")
+    fun clearConsecutiveFailures(pkg: String)
+
+    @Query("UPDATE app_rules SET needsRecheck = 1 WHERE packageName = :pkg")
+    fun markNeedsRecheck(pkg: String)
 
     @Query("UPDATE app_rules SET lastAskedDay = :day WHERE packageName = :pkg")
     fun setLastAsked(pkg: String, day: Long)
 
     @Query("UPDATE app_rules SET teachDeclined = 1 WHERE packageName = :pkg")
     fun setDeclined(pkg: String)
+
+    @Query("UPDATE app_rules SET mode = 'OFF', teachDeclined = 1 WHERE packageName = :pkg")
+    fun setOff(pkg: String)
 
     @Query("DELETE FROM app_rules WHERE packageName = :pkg")
     fun delete(pkg: String)

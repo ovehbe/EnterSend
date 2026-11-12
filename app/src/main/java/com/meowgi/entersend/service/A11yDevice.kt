@@ -42,7 +42,19 @@ class A11yDevice(private val service: AccessibilityService) : Device {
     override fun windowState(field: Field): WindowState? {
         val root = rootOf(field) ?: return null
         val b = boundsOf(root)
-        return WindowState(service.resources.configuration.orientation, b.width, b.height)
+        val density = service.resources.displayMetrics.density
+        val keyboard = try {
+            service.windows?.any { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD } == true
+        } catch (_: SecurityException) {
+            false
+        }
+        return WindowState(
+            orientation = service.resources.configuration.orientation,
+            width = b.width,
+            height = b.height,
+            keyboardShown = keyboard,
+            density = density,
+        )
     }
 
     override fun click(node: NodeSnap): Boolean =

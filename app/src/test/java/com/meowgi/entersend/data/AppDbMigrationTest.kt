@@ -6,6 +6,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.meowgi.entersend.context
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Rule
@@ -16,10 +18,6 @@ import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 
-/**
- * Every schema version must open data saved by the previous one. When adding version N, add a
- * test that creates a v(N-1) database with [insertV1Data]-style real rows and upgrades it.
- */
 @RunWith(RobolectricTestRunner::class)
 class AppDbMigrationTest {
     private val name = "migration-test.db"
@@ -53,7 +51,6 @@ class AppDbMigrationTest {
         )
     }
 
-    /** Room refuses main-thread queries; run like production does, rethrowing the real error. */
     private fun <T> offMain(block: () -> T): T = try {
         Executors.newSingleThreadExecutor().submit(Callable(block)).get()
     } catch (e: ExecutionException) {
@@ -62,13 +59,16 @@ class AppDbMigrationTest {
 
     @Test fun everyVersionStepHasAMigration() {
         for (from in 1 until AppDb.VERSION) {
-            assertTrue("missing migration $from -> ${from + 1}", AppDb.MIGRATIONS.any { it.startVersion == from && it.endVersion == from + 1 })
+            assertTrue(
+                "missing migration $from -> ${from + 1}",
+                AppDb.MIGRATIONS.any { it.startVersion == from && it.endVersion == from + 1 },
+            )
         }
     }
 
-    @Test fun savedV1DataOpensInTheCurrentSchema() {
+    @Test fun taughtV1RuleSurvivesUpgradeToV2() {
         insertV1Data()
-        helper.runMigrationsAndValidate(name, AppDb.VERSION, true, *AppDb.MIGRATIONS).close()
+        helper.runMigrationsAndValidate(name, 2, true, AppDb.MIGRATION_1_2).close()
 
         val db = AppDb.build(context(), name)
         try {
@@ -76,7 +76,16 @@ class AppDbMigrationTest {
             assertEquals("Gönder", wa.sendDesc)
             assertEquals(41, wa.successCount)
             assertEquals(650, wa.tapX)
+            assertEquals(640, wa.tapY)
+            assertEquals("/data/user/0/com.meowgi.entersend/files/crops/com.whatsapp-1.png", wa.cropPath)
+            assertTrue(wa.hasNodeRule)
+            assertTrue(wa.hasTapSpot) // legacy absolute anchors still count
             assertEquals(Mode.LEARNED, wa.effectiveMode)
+            assertEquals(0, wa.consecutiveFailures)
+            assertFalse(wa.needsRecheck)
+            assertNull(wa.tapDxDp)
+            assertNull(wa.tapFx)
+            assertNull(wa.keyboardShown)
             assertEquals(Mode.OFF, tg.effectiveMode)
             assertTrue(tg.teachDeclined)
         } finally {

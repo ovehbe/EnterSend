@@ -12,11 +12,16 @@ In chat text fields, **Enter sends** the message and **Shift+Enter inserts a new
 Requirements: JDK 17+ and an Android SDK with platform 35 (`ANDROID_HOME` set, or `sdk.dir` in `local.properties`).
 
 ```bash
-./gradlew testDebugUnitTest assembleDebug
+./gradlew testDebugUnitTest assembleDebug assembleRelease
 ```
 
-Unit tests run on the JVM with Robolectric (no device needed). The APK is written to
-`app/build/outputs/apk/debug/app-debug.apk`.
+Unit tests run on the JVM with Robolectric (no device needed).
+
+- Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
+- Unsigned release APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
+  (no `signingConfig`, no keystore in the repo — sign outside with your own key).
+  R8/minify is **off** for release; no keep rules are required for the accessibility
+  service or Room.
 
 ## Install and enable
 

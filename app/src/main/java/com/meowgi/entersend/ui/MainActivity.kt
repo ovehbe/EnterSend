@@ -36,16 +36,16 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         val prefs = prefs(this)
         if (!prefs.getBoolean(KEY_SETUP_DONE, false)) startActivity(Intent(this, SetupActivity::class.java))
-        if (Build.VERSION.SDK_INT >= 33 && !prefs.getBoolean(KEY_ASKED_NOTIFICATIONS, false) &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            prefs.edit().putBoolean(KEY_ASKED_NOTIFICATIONS, true).apply()
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
 
         setContentView(R.layout.activity_main)
         findViewById<View>(R.id.banner_fix).setOnClickListener { ServiceWatch.openAccessibilitySettings(this) }
+        findViewById<View>(R.id.banner_notifications_fix).setOnClickListener {
+            if (Build.VERSION.SDK_INT >= 33) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+            }
+        }
         findViewById<View>(R.id.open_setup).setOnClickListener { startActivity(Intent(this, SetupActivity::class.java)) }
+        handleTeachIntent(intent)
         search = findViewById(R.id.search)
         needsOnly = findViewById(R.id.needs_teaching)
         empty = findViewById(R.id.empty)
@@ -63,12 +63,25 @@ class MainActivity : Activity() {
         needsOnly.setOnCheckedChangeListener { _, _ -> applyFilter() }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleTeachIntent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
         val running = ServiceWatch.isRunning()
         findViewById<View>(R.id.banner).visibility = if (running) View.GONE else View.VISIBLE
+        val notifDenied = Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        findViewById<View>(R.id.banner_notifications).visibility = if (notifDenied) View.VISIBLE else View.GONE
         ServiceWatch.updateNotice(this, running)
         reload()
+    }
+
+    private fun handleTeachIntent(intent: Intent?) {
+        val pkg = intent?.getStringExtra(com.meowgi.entersend.service.NotifyActionReceiver.EXTRA_PACKAGE) ?: return
+        teach(pkg)
     }
 
     private fun reload() {

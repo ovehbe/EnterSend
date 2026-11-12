@@ -9,17 +9,26 @@ android {
     namespace = "com.meowgi.entersend"
     compileSdk = 35
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "com.meowgi.entersend"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {
+        debug {
+            isDebuggable = true
+        }
         release {
+            // Unsigned: no signingConfig. Minify off so the accessibility service needs no keep rules.
             isMinifyEnabled = false
+            signingConfig = null
         }
     }
 

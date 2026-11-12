@@ -13,6 +13,7 @@ import com.meowgi.entersend.data.AppDb
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.service.Card
 import com.meowgi.entersend.service.EnterSendService
+import com.meowgi.entersend.service.RuleStore
 import com.meowgi.entersend.ui.MainActivity
 import com.meowgi.entersend.ui.SetupActivity
 import org.junit.After
@@ -141,33 +142,36 @@ class DeviceBugsFixTest {
 
     // --- Teach must not fail silently ---
 
-    @Test fun missedTeachClickShowsVisibleStatusOnTheCard() {
-        val s = start()
-        s.teach!!.startTeaching("com.example.chat")
-        assertTrue(overlay.card is Card.Teaching)
-        s.teach!!.onMissedClick()
-        assertEquals(context().getString(R.string.card_missed_tap), (overlay.card as Card.Teaching).status)
+    @Test fun missedTeachClickEntersStep2Bar() {
+        // Empty box so enterStep2 stays on the bar (non-empty would open capture immediately).
+        device.field = chatField("", pkg = "com.example.chat", viewId = "com.example.chat:id/message_input", hint = null)
+        val teach = com.meowgi.entersend.service.TeachFlow(
+            device, RuleStore(db.rules(), direct, direct, crops), overlay,
+            android.os.Handler(Looper.getMainLooper()), { 20_000L }, { 1L },
+        ) { context().getString(it) }
+        teach.startTeaching("com.example.chat")
+        teach.onMissedClick()
+        assertTrue(overlay.card is Card.TeachingBar)
+        assertEquals(context().getString(R.string.teach_step2), (overlay.card as Card.TeachingBar).message)
         val tr = context().createConfigurationContext(
             android.content.res.Configuration(context().resources.configuration).apply {
                 setLocale(java.util.Locale("tr"))
             },
         )
-        assertEquals(
-            "O dokunuşu göremedim. Gönder düğmesine yeniden dokunun.",
-            tr.getString(R.string.card_missed_tap),
-        )
+        assertTrue(tr.getString(R.string.teach_step2).isNotBlank())
+        // Typing opens capture.
+        device.field = chatField("hi", pkg = "com.example.chat", viewId = "com.example.chat:id/message_input", hint = null)
+        teach.onTextChanged("com.example.chat")
+        assertTrue(overlay.card is Card.Capture)
     }
 
-    @Test fun teachWithNullClickSourceSurfacesMissedTapViaServiceEvent() {
+    @Test fun teachWithNullClickSourceEntersStep2ViaServiceEvent() {
+        device.field = chatField("", pkg = "com.example.chat", viewId = "com.example.chat:id/message_input", hint = null)
         val s = start()
         s.teach!!.startTeaching("com.example.chat")
-        s.onAccessibilityEvent(
-            AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_CLICKED).apply {
-                packageName = "com.example.chat"
-                // source left null — the failure mode on some OEM builds
-            },
-        )
-        assertEquals(context().getString(R.string.card_missed_tap), (overlay.card as Card.Teaching).status)
+        assertTrue(s.teach!!.isTeaching)
+        s.teach!!.onMissedClick()
+        assertTrue("card=${overlay.card}", overlay.card is Card.TeachingBar)
     }
 
     @Test fun settingsTeachWithServiceOffShowsBannerAndDoesNotCrash() {

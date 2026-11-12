@@ -8,22 +8,28 @@ import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
+import android.widget.Toast
+import com.meowgi.entersend.BuildConfig
 import com.meowgi.entersend.EnterSendApp
 import com.meowgi.entersend.ServiceWatch
 import com.meowgi.entersend.core.KeyGate
 import com.meowgi.entersend.data.CropFiles
+import java.time.LocalDate
 
 class EnterSendService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
     private val gate = KeyGate()
     private var enter: EnterHandler? = null
+    private var device: Device? = null
+    private var notifier: NewAppNotifier? = null
     internal var teach: TeachFlow? = null
         private set
     internal var store: RuleStore? = null
         private set
 
     override fun onServiceConnected() {
-        // Re-assert the XML flags: some OEM builds drop key filtering unless set at connect time.
+        // Drop any leftover teach overlay from a previous connection.
+        teach?.forceClose()
         serviceInfo = serviceInfo.apply {
             eventTypes = eventTypes or
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
@@ -35,11 +41,13 @@ class EnterSendService : AccessibilityService() {
                 AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         }
         val app = application as EnterSendApp
+        val a11y = A11yDevice(this).also { device = NoticeDevice(it, this) }
         attach(
-            A11yDevice(this),
+            a11y,
             RuleStore(app.db.rules(), app.io, { main.post(it) }, CropFiles(filesDir)),
             CardOverlay(this),
         )
+        notifier = NewAppNotifier(this, store!!, { LocalDate.now().toEpochDay() })
         instance = this
         ServiceWatch.updateNotice(this, running = true)
     }
@@ -55,21 +63,30 @@ class EnterSendService : AccessibilityService() {
     }
 
     private fun stopped() {
+        teach?.forceClose()
         if (instance === this) instance = null
         ServiceWatch.updateNotice(this, running = false)
     }
 
-    /** Wires the service to a device, store and overlay; tests call this with fakes. */
     internal fun attach(
         device: Device,
         store: RuleStore,
         overlay: Overlay,
-        today: () -> Long = { java.time.LocalDate.now().toEpochDay() },
+        today: () -> Long = { LocalDate.now().toEpochDay() },
+        notifier: NewAppNotifier? = null,
     ) {
-        val teach = TeachFlow(device, store, overlay, main, today, ::versionOf) { getString(it) }
+        teach?.forceClose()
+        this.device = device
         this.store = store
+        this.notifier = notifier
+        val teach = TeachFlow(device, store, overlay, main, today, ::versionOf) { getString(it) }
         this.teach = teach
-        enter = EnterHandler(device, store, main) { teach.offer(it) }
+        enter = EnterHandler(
+            device, store, main,
+            offerTeach = { teach.offer(it) },
+            debug = BuildConfig.DEBUG,
+            strings = { getString(it) },
+        )
     }
 
     public override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -78,6 +95,12 @@ class EnterSendService : AccessibilityService() {
         return gate.filter(event) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> !teach.onEnter() && enter.onEnter(event)
+                KeyEvent.KEYCODE_BACK -> if (teach.isTeaching) {
+                    teach.onKey(event)
+                    true
+                } else {
+                    false
+                }
                 else -> teach.onKey(event)
             }
         }
@@ -86,15 +109,22 @@ class EnterSendService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val pkg = event.packageName?.toString() ?: return
         when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> store?.onForeground(pkg)
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                store?.onForeground(pkg)
+                val state = store?.get(pkg)
+                if (state != null) notifier?.onAppSeen(pkg, state.rule)
+                else {
+                    // Still loading — ask again after a short delay once the rule is in memory.
+                    main.postDelayed({
+                        store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule) }
+                    }, 200)
+                }
+            }
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> teach?.onTextChanged(pkg)
             AccessibilityEvent.TYPE_VIEW_CLICKED -> if (teach?.isTeaching == true) {
                 val source = event.source
-                if (source != null) {
-                    teach?.onClicked(pkg, A11yDevice.clickedSnap(source))
-                } else {
-                    teach?.onMissedClick()
-                }
+                if (source != null) teach?.onClicked(pkg, A11yDevice.clickedSnap(source))
+                else teach?.onMissedClick()
             }
         }
     }
@@ -102,7 +132,6 @@ class EnterSendService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     companion object {
-        /** The connected service, or null when it is off or was killed. Main thread only. */
         var instance: EnterSendService? = null
             private set
     }
@@ -111,5 +140,18 @@ class EnterSendService : AccessibilityService() {
         packageManager.getPackageInfo(pkg, 0).longVersionCode
     } catch (_: PackageManager.NameNotFoundException) {
         null
+    }
+}
+
+/** Adds toast/notice on top of a real [A11yDevice]. */
+private class NoticeDevice(
+    private val inner: A11yDevice,
+    private val service: AccessibilityService,
+) : Device by inner {
+    override fun notice(message: String) {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(service, message, Toast.LENGTH_SHORT).show()
+        }
+        android.util.Log.d("EnterSend", message)
     }
 }
