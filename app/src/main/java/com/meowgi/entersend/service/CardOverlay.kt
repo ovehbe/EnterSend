@@ -4,12 +4,14 @@ import android.accessibilityservice.AccessibilityService
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.os.Build
+import android.util.DisplayMetrics
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
@@ -22,8 +24,8 @@ import com.meowgi.entersend.core.ScreenCoords
 /**
  * Draws cards / the teach capture overlay as TYPE_ACCESSIBILITY_OVERLAY windows.
  *
- * Capture uses a full-bleed window (LAYOUT_IN_SCREEN | LAYOUT_NO_LIMITS + cutout short-edges)
- * so raw screen pixels match view space, accessibility bounds, and dispatchGesture.
+ * Capture is full-bleed so raw screen pixels == view layout space. Marker margins use those
+ * raw coordinates directly (centred); never subtract getLocationOnScreen.
  * Instruction / Done bars sit at the top by default (bottom only when [PopupEdge.BOTTOM]).
  */
 class CardOverlay(private val service: AccessibilityService) : Overlay {
@@ -35,8 +37,16 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
     var lastRawTap: Pair<Int, Int>? = null
         private set
 
-    /** Last marker position in screen pixels after layout. */
+    /** Last marker centre in screen pixels (same numbers used for margins + radius). */
     var lastMarkerScreen: Pair<Int, Int>? = null
+        private set
+
+    /** Last marker FrameLayout margins after placement — for tests. */
+    var lastMarkerMargins: Pair<Int, Int>? = null
+        private set
+
+    /** Last debug readout shown on the Save card. */
+    var lastDebugLine: String? = null
         private set
 
     override fun setTapListener(listener: ((x: Int, y: Int) -> Unit)?) {
@@ -112,7 +122,6 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
             is Card.Capture -> error("use showCapture")
         }
 
-        // WRAP_CONTENT card: not focusable, not touch-modal so typing / taps outside still reach the app.
         val lp = baseLp(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             gravity = if (edge == PopupEdge.BOTTOM) Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             else Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -135,21 +144,34 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
                 android.util.Log.d(TAG, "tap raw=($sx,$sy) viewLocal=(${e.x.toInt()},${e.y.toInt()})")
                 tapListener?.invoke(sx, sy)
             }
-            true // consume so the app does not send
+            true
         }
         root.isFocusableInTouchMode = false
 
         if (card.markerX != null && card.markerY != null) {
+            val (marginX, marginY) = ScreenCoords.markerMargins(card.markerX, card.markerY)
             val marker = View(ctx).apply {
                 setBackgroundColor(0x88FF9800.toInt())
-                // Margins filled after attach using screen→view conversion (handles any residual inset).
-                layoutParams = FrameLayout.LayoutParams(48, 48)
+                layoutParams = FrameLayout.LayoutParams(
+                    ScreenCoords.MARKER_SIZE_PX,
+                    ScreenCoords.MARKER_SIZE_PX,
+                ).apply {
+                    leftMargin = marginX
+                    topMargin = marginY
+                    // Explicit gravity so margins are from the screen top-left of the full-bleed root.
+                    gravity = Gravity.TOP or Gravity.START
+                }
             }
             root.addView(marker)
+            lastMarkerMargins = marginX to marginY
+            lastMarkerScreen = card.markerX to card.markerY
+
             val bar = LayoutInflater.from(ctx).inflate(R.layout.overlay_card, root, false)
             bar.findViewById<TextView>(R.id.card_title).setText(R.string.teach_marker_title)
-            bar.findViewById<TextView>(R.id.card_keys).text =
-                card.status ?: ctx.getString(R.string.teach_capture_keys)
+            val keys = bar.findViewById<TextView>(R.id.card_keys)
+            val status = card.status ?: ctx.getString(R.string.teach_capture_keys)
+            // Debug readout filled after attach (needs real locationOnScreen / metrics).
+            keys.text = status
             bar.findViewById<Button>(R.id.card_yes).apply {
                 setText(R.string.done)
                 setOnClickListener { onChoice(Choice.YES) }
@@ -171,15 +193,12 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
                     barGravity,
                 ),
             )
-            // Place marker after the window is attached so getLocationOnScreen is valid.
             root.post {
-                val (lx, ly) = ScreenCoords.toViewLocal(card.markerX, card.markerY, root)
-                val lp = marker.layoutParams as FrameLayout.LayoutParams
-                lp.leftMargin = lx - 24
-                lp.topMargin = ly - 24
-                marker.layoutParams = lp
-                lastMarkerScreen = card.markerX to card.markerY
-                android.util.Log.d(TAG, "marker screen=(${card.markerX},${card.markerY}) viewLocal=($lx,$ly)")
+                val debug = buildDebugLine(root, card.markerX, card.markerY)
+                lastDebugLine = debug
+                keys.text = "$status\n$debug"
+                keys.textSize = 10f
+                android.util.Log.d(TAG, debug)
             }
         } else if (card.status != null) {
             val hint = TextView(ctx).apply {
@@ -199,8 +218,51 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
             )
         }
 
-        val lp = fullBleedLp()
-        add(root, lp)
+        add(root, fullBleedLp())
+    }
+
+    /** Compact line for the next device test — remove once coords are confirmed. */
+    private fun buildDebugLine(root: View, markerX: Int, markerY: Int): String {
+        val loc = IntArray(2)
+        root.getLocationOnScreen(loc)
+        val raw = lastRawTap
+        val dm = displaySize()
+        val insets = systemBarInsets()
+        val density = service.resources.displayMetrics.density
+        return "raw=${raw?.first},${raw?.second} mk=$markerX,$markerY loc=${loc[0]},${loc[1]} " +
+            "disp=${dm.first}x${dm.second} insets=${insets[0]},${insets[1]},${insets[2]},${insets[3]} dens=$density"
+    }
+
+    private fun displaySize(): Pair<Int, Int> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val bounds = wm.maximumWindowMetrics.bounds
+                return bounds.width() to bounds.height()
+            } catch (_: RuntimeException) {
+            }
+        }
+        val dm = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getRealMetrics(dm)
+        return dm.widthPixels to dm.heightPixels
+    }
+
+    private fun systemBarInsets(): IntArray {
+        val out = intArrayOf(0, 0, 0, 0) // top, right, bottom, left
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val insets = wm.maximumWindowMetrics.windowInsets
+                    .getInsets(WindowInsets.Type.systemBars())
+                out[0] = insets.top
+                out[1] = insets.right
+                out[2] = insets.bottom
+                out[3] = insets.left
+                return out
+            } catch (_: RuntimeException) {
+            }
+        }
+        out[0] = statusBarInset()
+        return out
     }
 
     private fun fullBleedLp() = baseLp(
@@ -250,6 +312,8 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
         view = null
         lastRawTap = null
         lastMarkerScreen = null
+        lastMarkerMargins = null
+        lastDebugLine = null
     }
 
     companion object {

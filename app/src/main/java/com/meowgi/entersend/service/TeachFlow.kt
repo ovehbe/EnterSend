@@ -39,6 +39,7 @@ class TeachFlow(
     private var state: State = Idle
     private val onChoice: (Choice) -> Unit = ::handleChoice
     private val step1Token = Any()
+    private val promoteToken = Any()
 
     val isTeaching: Boolean
         get() = state is Listening || state is RetryBar || state is Capturing || state is Confirming
@@ -85,10 +86,12 @@ class TeachFlow(
     }
 
     fun onTextChanged(pkg: String) {
-        val bar = state as? RetryBar ?: return
-        if (bar.pkg != pkg) return
-        val field = device.focusedField()?.takeIf { it.packageName == pkg } ?: return
-        if (field.text.isNotBlank()) showCapture(pkg)
+        promoteCaptureIfReady(pkg)
+    }
+
+    /** Also called on window-content changes — Telegram sometimes delays TEXT_CHANGED. */
+    fun onContentChanged(pkg: String) {
+        promoteCaptureIfReady(pkg)
     }
 
     fun onClicked(pkg: String, node: NodeSnap) {
@@ -102,14 +105,30 @@ class TeachFlow(
                     enterStep2(pkg)
                 }
             }
-            is RetryBar, is Capturing -> Unit // capture overlay consumes the teach tap itself
+            is RetryBar -> {
+                // Tap went to the app (TeachingBar is not full-screen). Promote immediately so
+                // the next attempt is captured; this click itself cannot be undone.
+                promoteCaptureIfReady(s.pkg)
+            }
+            is Capturing -> Unit // full-screen overlay consumes the teach tap
             else -> Unit
         }
     }
 
     fun onMissedClick() {
-        val s = state
-        if (s is Listening) enterStep2(s.pkg)
+        when (val s = state) {
+            is Listening -> enterStep2(s.pkg)
+            is RetryBar -> promoteCaptureIfReady(s.pkg)
+            else -> Unit
+        }
+    }
+
+    /** If step-2 is waiting and the focused box has text, open the capturing layer now. */
+    fun promoteCaptureIfReady(pkg: String? = null) {
+        val bar = state as? RetryBar ?: return
+        if (pkg != null && bar.pkg != pkg) return
+        val field = device.focusedField()?.takeIf { it.packageName == bar.pkg } ?: return
+        if (field.text.isNotBlank()) showCapture(bar.pkg)
     }
 
     /** Screen tap on the transparent capture overlay. Coordinates are screen pixels. */
@@ -154,12 +173,26 @@ class TeachFlow(
         state = RetryBar(pkg)
         overlay.setTapListener(null)
         val field = device.focusedField()?.takeIf { it.packageName == pkg }
-        // Type-something bar: WRAP_CONTENT at top (or bottom if field is top-half). Not full-screen,
-        // not focusable — physical keyboard / taps outside still reach the app.
+        // Type-something bar: WRAP_CONTENT at top. Not full-screen / not focusable so typing works.
+        // Capture layer takes over the moment the box has text (see promoteCaptureIfReady).
         overlay.show(Card.TeachingBar(strings(R.string.teach_step2), barEdge(field?.bounds, null)), onChoice)
         armSafetyTimeout(pkg)
-        // Capture layer only once the focused box has text.
-        if (field != null && field.text.isNotBlank()) showCapture(pkg)
+        armPromotePoll(pkg)
+        promoteCaptureIfReady(pkg)
+    }
+
+    /** Poll while RetryBar — some messengers delay or skip TYPE_VIEW_TEXT_CHANGED. */
+    private fun armPromotePoll(pkg: String) {
+        main.postAtTime(
+            {
+                if (state is RetryBar && (state as RetryBar).pkg == pkg) {
+                    promoteCaptureIfReady(pkg)
+                    if (state is RetryBar) armPromotePoll(pkg)
+                }
+            },
+            promoteToken,
+            android.os.SystemClock.uptimeMillis() + PROMOTE_POLL_MS,
+        )
     }
 
     private fun showCapture(pkg: String) {
@@ -297,6 +330,7 @@ class TeachFlow(
     private fun clearTimeouts() {
         main.removeCallbacks(safetyRunnable)
         main.removeCallbacksAndMessages(step1Token)
+        main.removeCallbacksAndMessages(promoteToken)
     }
 
     private fun finish() {
@@ -310,6 +344,7 @@ class TeachFlow(
         const val STEP1_TIMEOUT_MS = 2_000L
         const val SAFETY_TIMEOUT_MS = 30_000L
         const val SAVED_MS = 1_500L
+        const val PROMOTE_POLL_MS = 150L
 
         private val MODIFIERS = setOf(
             KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.KEYCODE_SHIFT_RIGHT,

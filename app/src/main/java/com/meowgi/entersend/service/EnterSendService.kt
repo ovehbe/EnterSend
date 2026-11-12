@@ -34,8 +34,10 @@ class EnterSendService : AccessibilityService() {
         serviceInfo = serviceInfo.apply {
             eventTypes = eventTypes or
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
                 AccessibilityEvent.TYPE_VIEW_CLICKED or
-                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
+                AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
             flags = flags or
                 AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
@@ -129,7 +131,10 @@ class EnterSendService : AccessibilityService() {
                     }, 200)
                 }
             }
-            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> teach?.onTextChanged(pkg)
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
+            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
+            -> teach?.onTextChanged(pkg)
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> teach?.onContentChanged(pkg)
             AccessibilityEvent.TYPE_VIEW_CLICKED -> if (teach?.isTeaching == true) {
                 val source = event.source
                 if (source != null) teach?.onClicked(pkg, A11yDevice.clickedSnap(source))

@@ -1,26 +1,30 @@
 package com.meowgi.entersend.core
 
 import android.view.MotionEvent
-import android.view.View
 
 /**
- * One screen-pixel coordinate space end to end: overlay tap → saved rule → dispatchGesture.
+ * One screen-pixel coordinate space end to end: overlay tap → marker → saved rule → dispatchGesture.
  *
- * Accessibility overlays that are laid out inside system insets report [MotionEvent.getX]/Y
- * relative to the window, which is shifted by the status bar / cutout. [MotionEvent.getRawX]
- * is always screen space — the same space as [android.view.accessibility.AccessibilityNodeInfo.getBoundsInScreen]
- * and [android.accessibilityservice.GestureDescription]. Always use raw for capture.
+ * On a full-bleed accessibility overlay (LAYOUT_IN_SCREEN | LAYOUT_NO_LIMITS, x=0,y=0), the
+ * capture view's layout origin is the screen origin. Marker margins must be the raw screen
+ * coordinates directly — do **not** subtract [View.getLocationOnScreen], which on real devices
+ * can still report a non-zero origin (status bar / cutout / NO_LIMITS quirks) and shifts the
+ * marker up and sideways. Robolectric usually returns (0,0), which hid this bug in unit tests.
+ *
+ * Touches: always [MotionEvent.getRawX]/[MotionEvent.getRawY] (same space as
+ * getBoundsInScreen and GestureDescription).
  */
 object ScreenCoords {
+    const val MARKER_SIZE_PX = 48
+
     fun fromTouch(e: MotionEvent): Pair<Int, Int> = e.rawX.toInt() to e.rawY.toInt()
 
     /**
-     * Converts a screen-pixel point into layout margins for a child of [host], whose origin
-     * may sit below the status bar when the overlay window is not full-bleed.
+     * FrameLayout margins so a [MARKER_SIZE_PX] marker is centred on the screen-pixel tap.
+     * Full-bleed only — no locationOnScreen adjustment.
      */
-    fun toViewLocal(screenX: Int, screenY: Int, host: View): Pair<Int, Int> {
-        val loc = IntArray(2)
-        host.getLocationOnScreen(loc)
-        return screenX - loc[0] to screenY - loc[1]
+    fun markerMargins(screenX: Int, screenY: Int): Pair<Int, Int> {
+        val r = MARKER_SIZE_PX / 2
+        return screenX - r to screenY - r
     }
 }
