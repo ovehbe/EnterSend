@@ -29,5 +29,8 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:defaultFocusHighlightEnabled">false</item>
+        <item name="colorControlHighlight">@color/focus_state_layer</item>
+        <item name="android:colorControlHighlight">@color/focus_state_layer</item>
     </style>
 </resources>

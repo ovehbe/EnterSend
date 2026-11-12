@@ -18,7 +18,9 @@ import com.meowgi.entersend.service.FakePromptBanner
 import com.meowgi.entersend.service.NewAppNotifier
 import com.meowgi.entersend.service.NotifyActionReceiver
 import com.meowgi.entersend.service.RuleStore
-import com.meowgi.entersend.ui.PromptActivity
+import com.meowgi.entersend.service.FakePromptChooser
+import com.meowgi.entersend.service.PromptOpen
+import com.meowgi.entersend.ui.MainActivity
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,6 +53,7 @@ class PromptReliabilityTest {
     }
 
     @After fun tearDown() {
+        EnterSendService.clearInstanceForTests()
         db.close()
         PromptDecisionLog.resetForTests(context())
         context().getSharedPreferences("entersend_prompts", 0).edit().clear().apply()
@@ -184,7 +187,7 @@ class PromptReliabilityTest {
         PromptPrefs.clearSnooze(context(), "com.example.chat")
         assertFalse(PromptPrefs.isSnoozed(context(), "com.example.chat", System.currentTimeMillis()))
 
-        // Don't-ask / ask-again (same RuleStore paths PromptActivity + Apps use).
+        // Don't-ask / ask-again (same RuleStore paths overlay + Apps use).
         store.decline("com.example.chat")
         assertTrue(store.get("com.example.chat")!!.rule.teachDeclined)
         assertFalse(
@@ -211,23 +214,73 @@ class PromptReliabilityTest {
         service.store!!.setOff("com.example.chat")
         assertEquals(Mode.OFF.name, service.store!!.get("com.example.chat")!!.rule.mode)
 
-        // PromptActivity exposes all keyboard-reachable actions.
-        val a = Robolectric.buildActivity(
-            PromptActivity::class.java,
-            Intent(context(), PromptActivity::class.java)
-                .putExtra(NotifyActionReceiver.EXTRA_PACKAGE, "com.example.chat"),
-        ).setup().get()
-        for (id in listOf(
-            com.meowgi.entersend.R.id.prompt_teach,
-            com.meowgi.entersend.R.id.prompt_later,
-            com.meowgi.entersend.R.id.prompt_passthrough,
-            com.meowgi.entersend.R.id.prompt_off,
-            com.meowgi.entersend.R.id.prompt_dont_ask,
-        )) {
-            val v = a.findViewById<android.view.View>(id)
+        // Overlay chooser layout exposes keyboard-reachable actions.
+        val ids = listOf(
+            com.meowgi.entersend.R.id.chooser_teach,
+            com.meowgi.entersend.R.id.chooser_later,
+            com.meowgi.entersend.R.id.chooser_off,
+            com.meowgi.entersend.R.id.chooser_dont_ask,
+        )
+        val inflater = android.view.LayoutInflater.from(context())
+        val chooserView = inflater.inflate(com.meowgi.entersend.R.layout.overlay_prompt_chooser, null)
+        for (id in ids) {
+            val v = chooserView.findViewById<android.view.View>(id)
             assertNotNull(v)
-            assertTrue(a.resources.getResourceEntryName(id), v.isClickable)
+            assertTrue(context().resources.getResourceEntryName(id), v.isClickable)
+            assertTrue(v.isFocusable)
         }
+    }
+
+    @Config(sdk = [29])
+    @Test fun notificationOpenShowsOverlayThroughService() {
+        installLauncher("com.example.chat")
+        val store = RuleStore(db.rules(), direct, direct, crops)
+        val chooser = FakePromptChooser()
+        val service = Robolectric.setupService(EnterSendService::class.java)
+        service.attach(FakeDevice(), store, FakeOverlay(), chooser = chooser)
+        EnterSendService.setInstanceForTests(service)
+        assertNotNull(EnterSendService.instance)
+
+        NotifyActionReceiver().onReceive(
+            context(),
+            Intent(NotifyActionReceiver.ACTION_OPEN)
+                .putExtra(NotifyActionReceiver.EXTRA_PACKAGE, "com.example.chat"),
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("com.example.chat", service.chooserOrNull()!!.showing().firstOrNull())
+        assertEquals("com.example.chat", chooser.lastPkg)
+
+        // Actions persist.
+        chooser.actions = { action, pkg ->
+            when (action) {
+                "later" -> PromptPrefs.snooze(context(), pkg, now + PromptPrefs.SNOOZE_MS)
+                "off" -> store.setOff(pkg)
+                "dont-ask" -> store.decline(pkg)
+            }
+        }
+        chooser.show("com.example.chat")
+        chooser.tapLater()
+        assertTrue(PromptPrefs.isSnoozed(context(), "com.example.chat", now + 1))
+        PromptPrefs.clearSnooze(context(), "com.example.chat")
+        chooser.show("com.example.chat")
+        chooser.tapOff()
+        assertEquals(Mode.OFF.name, store.get("com.example.chat")!!.rule.mode)
+        store.putLocal(AppRule("com.example.chat"))
+        chooser.show("com.example.chat")
+        chooser.tapDontAsk()
+        assertTrue(store.get("com.example.chat")!!.rule.teachDeclined)
+    }
+
+    @Config(sdk = [29])
+    @Test fun openFallbackLaunchesMainWithShowActionsWhenServiceGone() {
+        EnterSendService.clearInstanceForTests()
+        PromptOpen.open(context(), "com.example.chat")
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        val intent = shadowOf(app).nextStartedActivity
+        assertNotNull(intent)
+        assertEquals(MainActivity::class.java.name, intent!!.component!!.className)
+        assertEquals("com.example.chat", intent.getStringExtra(NotifyActionReceiver.EXTRA_PACKAGE))
+        assertTrue(intent.getBooleanExtra(NotifyActionReceiver.EXTRA_SHOW_ACTIONS, false))
     }
 
     @Config(sdk = [29])

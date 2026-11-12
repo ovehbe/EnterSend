@@ -37,8 +37,8 @@ Open EnterSend. The first-run setup has three steps, each with a check mark:
 2. **Press Enter and Shift+Enter** in the focusable box.
 3. **Try it**: type in the test box and press Enter (it is sent) and Shift+Enter (new line).
 
-Everything is reachable with the physical keyboard: arrow keys or Tab move focus (subtle tint, no thick
-outline), Enter presses the focused control.
+Everything is reachable with the physical keyboard: arrow keys or Tab move focus (subtle Material tint;
+system orange focus highlight is disabled), Enter presses the focused control.
 
 ## App UI (0.3.1)
 
@@ -60,11 +60,14 @@ the same behavior; only the visuals were polished.
 For every **new open** of a launcher-visible non-system app that is still undecided, EnterSend
 shows a high-importance heads-up notification on channel `teach_prompt_alert` (Teach / Remind later /
 Off). Foreground detection uses application windows / active root — not the event package (IME,
-overlays, and EnterSend’s own banner are ignored). If notifications are denied or the channel is
-blocked, a top accessibility overlay banner appears instead. Tapping either opens a compact chooser.
-Session dedupe prevents spam inside one app visit; leaving and returning asks again until the user
-decides. System apps stay Off and are never prompted. Apps → **Ask again on open** clears “don’t ask
-again”. Settings → **Diagnostics** lists the last ~100 prompt decisions (Copy / Share).
+overlays, and EnterSend’s own banner are ignored). An optional **Usage Access** backup (off by
+default) can also detect resumes; Diagnostics logs `a11y/windows`, `a11y/root`, `a11y/event`, or
+`usage`. If notifications are denied or the channel is blocked, a top accessibility overlay banner
+appears instead. Tapping either opens a compact **accessibility overlay** chooser over the current
+app (not a dialog activity). If the service is disconnected, EnterSend opens the Apps action sheet
+instead. Session dedupe prevents spam inside one visit; leaving and returning asks again until the
+user decides. System apps stay Off and are never prompted. Apps → **Ask again on open** clears
+“don’t ask again”. Settings → **Diagnostics** lists the last ~100 prompt decisions (Copy / Share).
 
 Select an app for: Teach / Re-teach, mode Auto, Learned, Pass-through, Off, Ask again, and Reset.
 System apps are hidden until you check **Show system apps**. Browsers, notes and email apps are

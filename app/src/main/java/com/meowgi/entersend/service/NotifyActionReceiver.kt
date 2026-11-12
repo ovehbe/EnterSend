@@ -6,11 +6,11 @@ import android.content.Intent
 import com.meowgi.entersend.EnterSendApp
 import com.meowgi.entersend.data.PromptPrefs
 import com.meowgi.entersend.ui.MainActivity
-import com.meowgi.entersend.ui.PromptActivity
 
 /**
  * Handles actions from the "Teach Enter for <app>?" notification.
- * The package is always read from [EXTRA_PACKAGE]; each package uses its own PendingIntent request code.
+ * Content tap / OPEN shows the accessibility overlay chooser when the service is live;
+ * otherwise opens MainActivity's Apps action sheet for that package.
  */
 class NotifyActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -41,24 +41,16 @@ class NotifyActionReceiver : BroadcastReceiver() {
             ACTION_TEACH -> {
                 if (service?.teach != null) {
                     service.teach!!.startTeaching(pkg)
-                    context.packageManager.getLaunchIntentForPackage(pkg)
-                        ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        ?.let { context.startActivity(it) }
                 } else {
                     context.startActivity(
                         Intent(context, MainActivity::class.java)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            .putExtra(EXTRA_PACKAGE, pkg),
+                            .putExtra(EXTRA_PACKAGE, pkg)
+                            .putExtra(EXTRA_SHOW_ACTIONS, true),
                     )
                 }
             }
-            ACTION_OPEN -> {
-                context.startActivity(
-                    Intent(context, PromptActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        .putExtra(EXTRA_PACKAGE, pkg),
-                )
-            }
+            ACTION_OPEN -> PromptOpen.open(context, pkg)
         }
     }
 
@@ -68,5 +60,6 @@ class NotifyActionReceiver : BroadcastReceiver() {
         const val ACTION_LATER = "com.meowgi.entersend.action.LATER"
         const val ACTION_OPEN = "com.meowgi.entersend.action.OPEN"
         const val EXTRA_PACKAGE = "package"
+        const val EXTRA_SHOW_ACTIONS = "show_actions"
     }
 }

@@ -368,6 +368,33 @@
                     android:textAppearance="?attr/textAppearanceBodySmall"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/usage_fallback"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:defaultFocusHighlightEnabled="false"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/setting_usage_fallback" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:text="@string/setting_usage_fallback_blurb"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/usage_grant"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:defaultFocusHighlightEnabled="false"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/setting_usage_grant"
+                    android:visibility="gone" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/export_button"
                     android:layout_width="match_parent"
@@ -422,6 +449,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/colorSurface"
+        android:defaultFocusHighlightEnabled="false"
         app:itemActiveIndicatorStyle="@style/Widget.Material3.BottomNavigationView.ActiveIndicator"
         app:labelVisibilityMode="labeled"
         app:menu="@menu/main_nav" />

@@ -10,6 +10,7 @@ import android.content.Context
 object PromptPrefs {
     private const val PREFS = "entersend_prompts"
     private const val KEY_ENABLED = "prompts_enabled"
+    private const val KEY_USAGE_FALLBACK = "usage_fallback"
     private const val KEY_SNOOZE_PREFIX = "snooze_"
 
     /** Default "Remind me later" snooze: 1 hour. */
@@ -20,6 +21,14 @@ object PromptPrefs {
 
     fun setPromptsEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_ENABLED, enabled).apply()
+    }
+
+    /** Optional Usage Access backup for foreground detection. Off by default. */
+    fun usageFallbackEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_USAGE_FALLBACK, false)
+
+    fun setUsageFallbackEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_USAGE_FALLBACK, enabled).apply()
     }
 
     fun snoozeUntil(context: Context, pkg: String): Long =

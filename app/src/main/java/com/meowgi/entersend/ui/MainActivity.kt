@@ -98,6 +98,16 @@ class MainActivity : AppCompatActivity() {
                 PromptPrefs.setPromptsEnabled(this@MainActivity, checked)
             }
         }
+        findViewById<MaterialSwitch>(R.id.usage_fallback).apply {
+            isChecked = PromptPrefs.usageFallbackEnabled(this@MainActivity)
+            setOnCheckedChangeListener { _, checked ->
+                PromptPrefs.setUsageFallbackEnabled(this@MainActivity, checked)
+                refreshUsageGrant()
+            }
+        }
+        findViewById<View>(R.id.usage_grant).setOnClickListener {
+            com.meowgi.entersend.service.UsageForeground.openSettings(this)
+        }
 
         handleTeachIntent(intent)
         search = findViewById(R.id.search)
@@ -134,12 +144,15 @@ class MainActivity : AppCompatActivity() {
             }
             true
         }
-        // Subtle focus state layer on bottom-nav items for D-pad / Tab.
+        // Subtle focus state layer on bottom-nav items for D-pad / Tab (no system orange rect).
         bottomNav.post {
             for (i in 0 until bottomNav.menu.size()) {
-                val itemView = (bottomNav.getChildAt(0) as? ViewGroup)?.getChildAt(i)
-                itemView?.foreground = getDrawable(R.drawable.focus_ring)
-                itemView?.isFocusable = true
+                val itemView = (bottomNav.getChildAt(0) as? ViewGroup)?.getChildAt(i) ?: continue
+                itemView.foreground = getDrawable(R.drawable.focus_ring)
+                itemView.isFocusable = true
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    itemView.defaultFocusHighlightEnabled = false
+                }
             }
         }
     }
@@ -152,6 +165,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshStatusUi()
+        refreshUsageGrant()
         ServiceWatch.updateNotice(this, ServiceWatch.isRunning())
         refreshProfileLabel()
         refreshProfiles()
@@ -207,7 +221,30 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleTeachIntent(intent: Intent?) {
         val pkg = intent?.getStringExtra(com.meowgi.entersend.service.NotifyActionReceiver.EXTRA_PACKAGE) ?: return
-        teach(pkg)
+        val showActions = intent.getBooleanExtra(
+            com.meowgi.entersend.service.NotifyActionReceiver.EXTRA_SHOW_ACTIONS,
+            false,
+        )
+        if (showActions) {
+            // Fallback when the accessibility overlay chooser can't be shown.
+            selectTab(1)
+            app.io.execute {
+                val loaded = AppRows.load(this, app.db.rules().all(), policy)
+                runOnUiThread {
+                    rows = loaded
+                    applyFilter()
+                    loaded.firstOrNull { it.pkg == pkg }?.let { showActions(it) }
+                }
+            }
+        } else {
+            teach(pkg)
+        }
+    }
+
+    private fun refreshUsageGrant() {
+        val usage = com.meowgi.entersend.service.UsageForeground(this)
+        val needGrant = PromptPrefs.usageFallbackEnabled(this) && !usage.hasPermission()
+        findViewById<View>(R.id.usage_grant).visibility = if (needGrant) View.VISIBLE else View.GONE
     }
 
     private fun refreshProfileLabel() {

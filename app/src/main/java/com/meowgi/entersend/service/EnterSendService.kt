@@ -27,6 +27,14 @@ class EnterSendService : AccessibilityService() {
     private var notifier: NewAppNotifier? = null
     private var policy: SystemAppPolicy? = null
     private var lastWindowPkg: String? = null
+    private var chooser: PromptChooser? = null
+    private var usage: UsageForeground? = null
+    private val usagePoll = object : Runnable {
+        override fun run() {
+            pollUsageForeground()
+            main.postDelayed(this, USAGE_POLL_MS)
+        }
+    }
     internal var teach: TeachFlow? = null
         private set
     internal var store: RuleStore? = null
@@ -38,6 +46,7 @@ class EnterSendService : AccessibilityService() {
     override fun onServiceConnected() {
         // Drop any leftover teach overlay from a previous connection.
         teach?.forceClose()
+        chooser?.hide()
         serviceInfo = serviceInfo.apply {
             eventTypes = eventTypes or
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
@@ -56,17 +65,21 @@ class EnterSendService : AccessibilityService() {
         val policy = SystemAppPolicy(this)
         val rules = RuleStore(app.db.rules(), app.io, { main.post(it) }, CropFiles(filesDir))
         val banner = A11yPromptBanner(this, main)
+        val promptChooser = A11yPromptChooser(this, { store }, { teach }, main)
         attach(
             a11y,
             rules,
             CardOverlay(this),
             policy = policy,
             banner = banner,
+            chooser = promptChooser,
         )
         instance = this
         ServiceWatch.updateNotice(this, running = true)
         // Ensure HIGH channel exists and legacy DEFAULT is gone as soon as a11y connects.
         notifier?.ensureChannel()
+        main.removeCallbacks(usagePoll)
+        main.post(usagePoll)
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -80,6 +93,8 @@ class EnterSendService : AccessibilityService() {
     }
 
     private fun stopped() {
+        main.removeCallbacks(usagePoll)
+        chooser?.hide()
         teach?.forceClose()
         if (instance === this) instance = null
         ServiceWatch.updateNotice(this, running = false)
@@ -93,11 +108,14 @@ class EnterSendService : AccessibilityService() {
         notifier: NewAppNotifier? = null,
         policy: SystemAppPolicy = SystemAppPolicy(this),
         banner: PromptBanner? = null,
+        chooser: PromptChooser? = null,
     ) {
         teach?.forceClose()
         this.device = device
         this.store = store
         this.policy = policy
+        this.usage = UsageForeground(this)
+        this.chooser = chooser ?: A11yPromptChooser(this, { this.store }, { this.teach }, main)
         val prompt = notifier ?: NewAppNotifier(
             this, store, today, policy, banner = banner,
         )
@@ -122,7 +140,14 @@ class EnterSendService : AccessibilityService() {
         )
     }
 
+    fun showPromptChooser(pkg: String) {
+        chooser?.show(pkg)
+    }
+
+    internal fun chooserOrNull(): PromptChooser? = chooser
+
     public override fun onKeyEvent(event: KeyEvent): Boolean {
+        if (chooser?.onKey(event) == true) return true
         val enter = enter ?: return false
         val teach = teach ?: return false
         return gate.filter(event) {
@@ -176,14 +201,25 @@ class EnterSendService : AccessibilityService() {
             }
             return
         }
-        val pkg = resolved.packageName
+        applyForeground(resolved.packageName, "a11y/" + resolved.source)
+    }
+
+    private fun pollUsageForeground() {
+        val u = usage ?: return
+        if (!u.isEnabled()) return
+        val pkg = u.latestResumedPackage() ?: return
+        if (pkg == lastWindowPkg) return
+        applyForeground(pkg, "usage")
+    }
+
+    private fun applyForeground(pkg: String, source: String) {
         val previous = lastWindowPkg
         if (previous != null && previous != pkg) {
             notifier?.onPackageLeft(previous)
         }
         lastWindowPkg = pkg
         store?.onForeground(pkg)
-        store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule, source = resolved.source) }
+        store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule, source = source) }
     }
 
     private fun resolveForeground(eventPkg: String?): ForegroundPackage.Resolved? {
@@ -263,6 +299,17 @@ class EnterSendService : AccessibilityService() {
     companion object {
         var instance: EnterSendService? = null
             private set
+        private const val USAGE_POLL_MS = 2_500L
+
+        /** Unit tests only. */
+        internal fun clearInstanceForTests() {
+            instance = null
+        }
+
+        /** Unit tests only — attach without onServiceConnected. */
+        internal fun setInstanceForTests(service: EnterSendService?) {
+            instance = service
+        }
     }
 
     private fun versionOf(pkg: String): Long? = try {

@@ -15,8 +15,6 @@ import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.Mode
 import com.meowgi.entersend.data.PromptDecisionLog
 import com.meowgi.entersend.data.PromptPrefs
-import com.meowgi.entersend.ui.PromptActivity
-
 /**
  * Prompts for launcher-visible non-system apps that are still **undecided**.
  *
@@ -177,11 +175,7 @@ class NewAppNotifier(
     }
 
     fun openPrompt(pkg: String) {
-        context.startActivity(
-            Intent(context, PromptActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra(NotifyActionReceiver.EXTRA_PACKAGE, pkg),
-        )
+        PromptOpen.open(context, pkg)
     }
 
     fun ensureChannel() {
@@ -210,10 +204,10 @@ class NewAppNotifier(
     }
 
     private fun promptPending(pkg: String, requestCode: Int): PendingIntent {
-        val intent = Intent(context, PromptActivity::class.java)
+        val intent = Intent(context, NotifyActionReceiver::class.java)
+            .setAction(NotifyActionReceiver.ACTION_OPEN)
             .putExtra(NotifyActionReceiver.EXTRA_PACKAGE, pkg)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        return PendingIntent.getActivity(
+        return PendingIntent.getBroadcast(
             context,
             requestCode,
             intent,

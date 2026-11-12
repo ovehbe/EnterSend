@@ -20,6 +20,7 @@ import com.meowgi.entersend.service.ForegroundPackage
 import com.meowgi.entersend.service.NewAppNotifier
 import com.meowgi.entersend.service.RuleStore
 import com.meowgi.entersend.ui.DiagnosticsActivity
+import com.meowgi.entersend.ui.MainActivity
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -53,6 +54,7 @@ class Prompt031FixTest {
     }
 
     @After fun tearDown() {
+        EnterSendService.clearInstanceForTests()
         db.close()
         PromptDecisionLog.resetForTests(context())
         context().getSharedPreferences("entersend_prompts", 0).edit().clear().apply()
@@ -215,6 +217,17 @@ class Prompt031FixTest {
         assertFalse("focus_ring must not use a stroke outline: $xml", "stroke" in xml)
         assertFalse("focus_ring must not style state_selected: $xml", "state_selected" in xml)
         assertTrue("focus_ring must react to focus: $xml", "state_focused" in xml)
+    }
+
+    @Test fun themeDisablesDefaultFocusHighlight() {
+        MainActivity.prefs(context()).edit().putBoolean(MainActivity.KEY_SETUP_DONE, true).apply()
+        val a = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        val tv = a.theme.obtainStyledAttributes(intArrayOf(android.R.attr.defaultFocusHighlightEnabled))
+        assertFalse(
+            "android:defaultFocusHighlightEnabled must be false to kill the system orange ring",
+            tv.getBoolean(0, true),
+        )
+        tv.recycle()
     }
 
     @Test fun diagnosticsScreenShowsLogAndActions() {

@@ -111,6 +111,9 @@
     <string name="settings_version">EnterSend %1$s (%2$d)</string>
     <string name="setting_prompts_enabled">Ask about new apps</string>
     <string name="setting_prompts_blurb">When on, EnterSend asks each time you open an app that has no teach decision yet.</string>
+    <string name="setting_usage_fallback">Usage Access backup</string>
+    <string name="setting_usage_fallback_blurb">Optional. If accessibility misses an app open, use Usage Access to detect the foreground app. Off by default.</string>
+    <string name="setting_usage_grant">Grant Usage Access</string>
     <string name="channel_teach_desc">Heads-up prompts to teach Enter for new chat apps</string>
     <string name="prompt_title">Teach this app?</string>
     <string name="prompt_body">Choose how Enter should work here. You can change this later in Apps.</string>
