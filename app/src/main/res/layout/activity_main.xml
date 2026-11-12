@@ -137,6 +137,41 @@
                         android:text="@string/turn_on" />
                 </LinearLayout>
 
+                <LinearLayout
+                    android:id="@+id/usage_access_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/status_card_bg"
+                    android:foreground="@drawable/focus_ring"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/usage_access_card_title"
+                        android:textAppearance="@style/TextAppearance.EnterSend.Section" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/usage_access_card_body"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/usage_access_grant"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:foreground="@drawable/focus_ring"
+                        android:text="@string/setting_usage_grant" />
+                </LinearLayout>
+
                 <TextView
                     android:id="@+id/profile_label"
                     android:layout_width="match_parent"

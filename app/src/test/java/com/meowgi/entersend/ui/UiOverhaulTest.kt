@@ -84,8 +84,8 @@ class UiOverhaulTest {
     }
 
     @Test fun versionIs031() {
-        assertEquals("0.3.1", BuildConfig.VERSION_NAME)
-        assertEquals(8, BuildConfig.VERSION_CODE)
+        assertEquals("0.3.2", BuildConfig.VERSION_NAME)
+        assertEquals(9, BuildConfig.VERSION_CODE)
     }
 
     @Test fun optimisticModeChangeUpdatesListWithoutWaitingForReload() {

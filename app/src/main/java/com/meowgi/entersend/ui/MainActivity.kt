@@ -108,6 +108,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.usage_grant).setOnClickListener {
             com.meowgi.entersend.service.UsageForeground.openSettings(this)
         }
+        findViewById<View>(R.id.usage_access_grant).setOnClickListener {
+            com.meowgi.entersend.service.UsageForeground.openSettings(this)
+        }
 
         handleTeachIntent(intent)
         search = findViewById(R.id.search)
@@ -243,7 +246,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshUsageGrant() {
         val usage = com.meowgi.entersend.service.UsageForeground(this)
-        val needGrant = PromptPrefs.usageFallbackEnabled(this) && !usage.hasPermission()
+        val granted = usage.hasPermission()
+        // Home card: optional Usage Access — visible until granted; auto-enable backup when granted.
+        val homeCard = findViewById<View>(R.id.usage_access_card)
+        if (granted) {
+            homeCard.visibility = View.GONE
+            if (!PromptPrefs.usageFallbackEnabled(this)) {
+                PromptPrefs.setUsageFallbackEnabled(this, true)
+                findViewById<MaterialSwitch>(R.id.usage_fallback).isChecked = true
+            }
+        } else {
+            homeCard.visibility = View.VISIBLE
+        }
+        val needGrant = PromptPrefs.usageFallbackEnabled(this) && !granted
         findViewById<View>(R.id.usage_grant).visibility = if (needGrant) View.VISIBLE else View.GONE
     }
 

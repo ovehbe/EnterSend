@@ -25,46 +25,57 @@ class EnterHandler(
     private val debug: Boolean = false,
     private val strings: (Int) -> String = { "" },
     private val resolveMode: (AppRule) -> Mode = { it.effectiveMode },
+    /** Diagnostics: focused-input package, rule label, whether Enter was consumed. */
+    private val onDecision: (pkg: String, ruleLabel: String, consumed: Boolean) -> Unit = { _, _, _ -> },
 ) {
     private var inFlight: Any? = null
 
     fun onEnter(e: KeyEvent): Boolean {
         if (e.isCtrlPressed || e.isAltPressed || e.isMetaPressed) return false
-        val field = device.focusedField() ?: return false
-        val state = store.get(field.packageName) ?: return false
+        // Package comes ONLY from the focused input (FOCUS_INPUT) — never prompt foreground.
+        val field = device.focusedField() ?: return decide(null, "no-field", false)
+        val pkg = field.packageName
+        val state = store.get(pkg) ?: return decide(pkg, "none", false)
         val rule = state.rule
+        val ruleLabel = rule.mode ?: resolveMode(rule).name
         val mode = resolveMode(rule)
-        if (mode == Mode.OFF || mode == Mode.PASS_THROUGH) return false
-        if (!ChatFieldGuard.isChatLike(field, rule)) return false
+        if (mode == Mode.OFF || mode == Mode.PASS_THROUGH) return decide(pkg, ruleLabel, false)
+        if (!ChatFieldGuard.isChatLike(field, rule)) return decide(pkg, ruleLabel, false)
 
         if (e.isShiftPressed) {
             val (text, cursor) = insertNewline(field.text, field.selStart, field.selEnd)
             device.setText(field, text, cursor)
-            return true
+            return decide(pkg, ruleLabel, true)
         }
-        if (field.text.isBlank()) return true
-        if (inFlight != null) return true
+        if (field.text.isBlank()) return decide(pkg, ruleLabel, true)
+        if (inFlight != null) return decide(pkg, ruleLabel, true)
 
-        val root = device.windowRoot(field) ?: return false
+        val root = device.windowRoot(field) ?: return decide(pkg, ruleLabel, false)
         val learned = if (rule.hasNodeRule) SendFinder.learned(root, field, rule) else null
         val node = learned ?: SendFinder.auto(root, field)
         if (node != null) {
-            if (!device.click(node)) return false
+            if (!device.click(node)) return decide(pkg, ruleLabel, false)
             if (debug) device.notice(strings(com.meowgi.entersend.R.string.debug_send_button))
             verify(field, viaTap = false)
-            return true
+            return decide(pkg, ruleLabel, true)
         }
 
         if (rule.hasTapSpot) {
             if (rule.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
                 offerTeach(rule)
-                return false
+                return decide(pkg, ruleLabel, false)
             }
-            return tapSpot(field, rule, state.crop)
+            val consumed = tapSpot(field, rule, state.crop)
+            return decide(pkg, ruleLabel, consumed)
         }
 
         offerTeach(rule)
-        return false
+        return decide(pkg, ruleLabel, false)
+    }
+
+    private fun decide(pkg: String?, ruleLabel: String, consumed: Boolean): Boolean {
+        onDecision(pkg ?: "(null)", ruleLabel, consumed)
+        return consumed
     }
 
     private fun tapSpot(field: Field, rule: AppRule, crop: Pixels?): Boolean {

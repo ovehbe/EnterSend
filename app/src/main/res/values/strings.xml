@@ -114,6 +114,9 @@
     <string name="setting_usage_fallback">Usage Access backup</string>
     <string name="setting_usage_fallback_blurb">Optional. If accessibility misses an app open, use Usage Access to detect the foreground app. Off by default.</string>
     <string name="setting_usage_grant">Grant Usage Access</string>
+    <string name="usage_access_card_title">Improve app detection: grant Usage Access</string>
+    <string name="usage_access_card_body">Optional. Helps EnterSend notice new apps even when the keyboard or an overlay is on top. Turned on automatically once you grant it.</string>
+    <string name="diagnostics_blurb_enter">Enter presses log package, rule, and consumed/not.</string>
     <string name="channel_teach_desc">Heads-up prompts to teach Enter for new chat apps</string>
     <string name="prompt_title">Teach this app?</string>
     <string name="prompt_body">Choose how Enter should work here. You can change this later in Apps.</string>
@@ -125,7 +128,7 @@
     <string name="action_ask_again">Ask again on open</string>
     <string name="diagnostics_open">Diagnostics</string>
     <string name="diagnostics_title">Prompt log</string>
-    <string name="diagnostics_blurb">Last ~100 new-app prompt decisions. Copy or share this if a teach prompt is missing.</string>
+    <string name="diagnostics_blurb">Last ~100 prompt and Enter decisions. Copy or share this if a teach prompt is missing or Enter does not send.</string>
     <string name="diagnostics_copy">Copy</string>
     <string name="diagnostics_share">Share</string>
     <string name="diagnostics_clear">Clear</string>

@@ -80,6 +80,37 @@ class Prompt031FixTest {
         assertEquals("windows", resolved.source)
     }
 
+    @Test fun foregroundPrefersActiveOverHigherLayerApplication() {
+        val resolved = ForegroundPackage.resolve(
+            ownPackage = "com.meowgi.entersend",
+            eventPackage = "com.android.inputmethod.latin",
+            rootPackage = "com.android.inputmethod.latin",
+            windows = listOf(
+                ForegroundPackage.WindowHint(
+                    "com.example.wrongapp",
+                    AccessibilityWindowInfo.TYPE_APPLICATION,
+                    10,
+                    active = false,
+                    focused = false,
+                ),
+                ForegroundPackage.WindowHint(
+                    "com.example.chat",
+                    AccessibilityWindowInfo.TYPE_APPLICATION,
+                    2,
+                    active = true,
+                    focused = true,
+                ),
+                ForegroundPackage.WindowHint(
+                    "com.android.inputmethod.latin",
+                    AccessibilityWindowInfo.TYPE_INPUT_METHOD,
+                    20,
+                ),
+            ),
+            isNoise = { it.contains("inputmethod") },
+        )
+        assertEquals("com.example.chat", resolved!!.packageName)
+    }
+
     @Test fun foregroundIgnoresOwnOverlayAndFallsBackToRoot() {
         val resolved = ForegroundPackage.resolve(
             ownPackage = "com.meowgi.entersend",
@@ -238,8 +269,8 @@ class Prompt031FixTest {
         assertTrue(text.contains("prompted:notification"))
         assertNotNull(a.findViewById(R.id.diag_copy))
         assertNotNull(a.findViewById(R.id.diag_share))
-        assertEquals(8, BuildConfig.VERSION_CODE)
-        assertEquals("0.3.1", BuildConfig.VERSION_NAME)
+        assertEquals(9, BuildConfig.VERSION_CODE)
+        assertEquals("0.3.2", BuildConfig.VERSION_NAME)
     }
 
     private fun installLauncher(pkg: String) {

@@ -40,17 +40,17 @@ Open EnterSend. The first-run setup has three steps, each with a check mark:
 Everything is reachable with the physical keyboard: arrow keys or Tab move focus (subtle Material tint;
 system orange focus highlight is disabled), Enter presses the focused control.
 
-## App UI (0.3.1)
+## App UI (0.3.2)
 
 Material 3 shell with light/dark (and dynamic color on Android 12+), built for the Q25’s short
 square screen and hardware keyboard (D-pad / Tab friendly focus tint).
 
 Bottom navigation:
 
-1. **Home** — service status, active profile, shortcuts to setup and apps.
+1. **Home** — service status, optional **Usage Access** card, active profile, shortcuts to setup and apps.
 2. **Apps** — searchable list with icons, mode, health; filters for needs-teaching and system apps.
 3. **Profiles** — save / switch / rename / delete full config snapshots (different keyboard heights).
-4. **Settings** — new-app prompts toggle, export/import JSON, open setup, **Diagnostics**, version.
+4. **Settings** — new-app prompts toggle, Usage Access backup, export/import JSON, open setup, **Diagnostics**, version.
 
 Settings changes still apply to the running accessibility service immediately. Teach overlays keep
 the same behavior; only the visuals were polished.
@@ -59,15 +59,19 @@ the same behavior; only the visuals were polished.
 
 For every **new open** of a launcher-visible non-system app that is still undecided, EnterSend
 shows a high-importance heads-up notification on channel `teach_prompt_alert` (Teach / Remind later /
-Off). Foreground detection uses application windows / active root — not the event package (IME,
-overlays, and EnterSend’s own banner are ignored). An optional **Usage Access** backup (off by
-default) can also detect resumes; Diagnostics logs `a11y/windows`, `a11y/root`, `a11y/event`, or
-`usage`. If notifications are denied or the channel is blocked, a top accessibility overlay banner
+Off). Prompt foreground detection uses `TYPE_WINDOW_STATE_CHANGED` / `TYPE_WINDOWS_CHANGED` and the
+**active/focused** `TYPE_APPLICATION` window — never IME, accessibility overlays, SystemUI, or
+EnterSend itself (those never clear the current app). **Enter** always uses the focused input
+field’s package (`findFocus(FOCUS_INPUT)`), independent of prompt foreground. An optional
+**Usage Access** backup (Home card when not granted; auto-enabled once granted) cross-checks
+`MOVE_TO_FOREGROUND` on each a11y event and when the screen turns on. Diagnostics logs prompt
+sources (`a11y/windows`, `a11y/root`, `a11y/event`, `usage`) and every Enter (package, rule,
+consumed). If notifications are denied or the channel is blocked, a top accessibility overlay banner
 appears instead. Tapping either opens a compact **accessibility overlay** chooser over the current
 app (not a dialog activity). If the service is disconnected, EnterSend opens the Apps action sheet
 instead. Session dedupe prevents spam inside one visit; leaving and returning asks again until the
 user decides. System apps stay Off and are never prompted. Apps → **Ask again on open** clears
-“don’t ask again”. Settings → **Diagnostics** lists the last ~100 prompt decisions (Copy / Share).
+“don’t ask again”.
 
 Select an app for: Teach / Re-teach, mode Auto, Learned, Pass-through, Off, Ask again, and Reset.
 System apps are hidden until you check **Show system apps**. Browsers, notes and email apps are

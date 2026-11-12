@@ -2,7 +2,10 @@ package com.meowgi.entersend.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
@@ -29,9 +32,10 @@ class EnterSendService : AccessibilityService() {
     private var lastWindowPkg: String? = null
     private var chooser: PromptChooser? = null
     private var usage: UsageForeground? = null
+    private var screenReceiver: BroadcastReceiver? = null
     private val usagePoll = object : Runnable {
         override fun run() {
-            pollUsageForeground()
+            crossCheckUsage("usage-poll")
             main.postDelayed(this, USAGE_POLL_MS)
         }
     }
@@ -42,6 +46,12 @@ class EnterSendService : AccessibilityService() {
 
     /** Test override for window/root resolution. */
     internal var foregroundProbe: (() -> ForegroundPackage.Resolved?)? = null
+
+    /** Test override for interactive window list (prompt foreground only). */
+    internal var windowsForTest: List<ForegroundPackage.WindowHint>? = null
+
+    /** Test override for rootInActiveWindow package (prompt foreground only). */
+    internal var rootPackageForTest: String? = null
 
     override fun onServiceConnected() {
         // Drop any leftover teach overlay from a previous connection.
@@ -80,6 +90,7 @@ class EnterSendService : AccessibilityService() {
         notifier?.ensureChannel()
         main.removeCallbacks(usagePoll)
         main.post(usagePoll)
+        registerScreenOn()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -94,10 +105,34 @@ class EnterSendService : AccessibilityService() {
 
     private fun stopped() {
         main.removeCallbacks(usagePoll)
+        unregisterScreenOn()
         chooser?.hide()
         teach?.forceClose()
         if (instance === this) instance = null
         ServiceWatch.updateNotice(this, running = false)
+    }
+
+    private fun registerScreenOn() {
+        if (screenReceiver != null) return
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == Intent.ACTION_SCREEN_ON) {
+                    crossCheckUsage("screen-on")
+                }
+            }
+        }
+        registerReceiver(receiver, IntentFilter(Intent.ACTION_SCREEN_ON))
+        screenReceiver = receiver
+    }
+
+    private fun unregisterScreenOn() {
+        screenReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: Exception) {
+            }
+        }
+        screenReceiver = null
     }
 
     internal fun attach(
@@ -127,6 +162,7 @@ class EnterSendService : AccessibilityService() {
         }
         val teach = TeachFlow(device, store, overlay, main, today, ::versionOf) { getString(it) }
         this.teach = teach
+        val log = PromptDecisionLog.get(this)
         enter = EnterHandler(
             device, store, main,
             offerTeach = { rule ->
@@ -137,6 +173,18 @@ class EnterSendService : AccessibilityService() {
             debug = BuildConfig.DEBUG,
             strings = { getString(it) },
             resolveMode = policy::resolveMode,
+            // Enter always uses focused-input package — never lastWindowPkg / prompt foreground.
+            onDecision = { pkg, ruleLabel, consumed ->
+                log.record(
+                    pkg,
+                    "enter",
+                    if (consumed) "consumed rule=$ruleLabel" else "not-consumed rule=$ruleLabel",
+                )
+                android.util.Log.d(
+                    "EnterSend",
+                    "Enter pkg=$pkg rule=$ruleLabel consumed=$consumed",
+                )
+            },
         )
     }
 
@@ -145,6 +193,9 @@ class EnterSendService : AccessibilityService() {
     }
 
     internal fun chooserOrNull(): PromptChooser? = chooser
+
+    /** Test / screen-on / a11y hook: Usage Access MOVE_TO_FOREGROUND cross-check. */
+    internal fun crossCheckUsageForTests(source: String = "usage") = crossCheckUsage(source)
 
     public override fun onKeyEvent(event: KeyEvent): Boolean {
         if (chooser?.onKey(event) == true) return true
@@ -171,27 +222,26 @@ class EnterSendService : AccessibilityService() {
             -> onForegroundEvent(event)
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
-            -> {
-                val pkg = event.packageName?.toString() ?: return
-                teach?.onTextChanged(pkg)
-            }
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
-                val pkg = event.packageName?.toString() ?: return
-                teach?.onContentChanged(pkg)
-            }
+            -> event.packageName?.toString()?.let { teach?.onTextChanged(it) }
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ->
+                event.packageName?.toString()?.let { teach?.onContentChanged(it) }
             AccessibilityEvent.TYPE_VIEW_CLICKED -> if (teach?.isTeaching == true) {
-                val pkg = event.packageName?.toString() ?: return
-                val source = event.source
-                if (source != null) teach?.onClicked(pkg, A11yDevice.clickedSnap(source))
-                else teach?.onMissedClick()
+                val pkg = event.packageName?.toString()
+                if (pkg != null) {
+                    val source = event.source
+                    if (source != null) teach?.onClicked(pkg, A11yDevice.clickedSnap(source))
+                    else teach?.onMissedClick()
+                }
             }
         }
+        // Every a11y event: optional Usage Access cross-check (when granted + enabled).
+        crossCheckUsage("usage/" + eventSource(event.eventType))
     }
 
     private fun onForegroundEvent(event: AccessibilityEvent) {
         val eventPkg = event.packageName?.toString()
         val resolved = resolveForeground(eventPkg) ?: run {
-            // IME / overlay / our banner — keep previous app; log noise for diagnostics.
+            // IME / overlay / SystemUI / self — keep previous app; never clear.
             if (!eventPkg.isNullOrBlank()) {
                 PromptDecisionLog.get(this).record(
                     eventPkg,
@@ -204,20 +254,23 @@ class EnterSendService : AccessibilityService() {
         applyForeground(resolved.packageName, "a11y/" + resolved.source)
     }
 
-    private fun pollUsageForeground() {
+    private fun crossCheckUsage(source: String) {
         val u = usage ?: return
-        if (!u.isEnabled()) return
-        val pkg = u.latestResumedPackage() ?: return
+        // Prefer toggle+permission; if Home card auto-enabled, toggle is on once granted.
+        val pkg = u.latestForegroundPackage() ?: return
         if (pkg == lastWindowPkg) return
-        applyForeground(pkg, "usage")
+        applyForeground(pkg, source)
     }
 
     private fun applyForeground(pkg: String, source: String) {
+        // Debounce: only act when the package actually changes.
+        if (pkg == lastWindowPkg) return
         val previous = lastWindowPkg
-        if (previous != null && previous != pkg) {
+        if (previous != null) {
             notifier?.onPackageLeft(previous)
         }
         lastWindowPkg = pkg
+        // Prompt path only — never feeds EnterHandler's package selection.
         store?.onForeground(pkg)
         store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule, source = source) }
     }
@@ -234,7 +287,7 @@ class EnterSendService : AccessibilityService() {
                 p.endsWith(".ime")
         }
         val windows = windowHints()
-        val rootPkg = try {
+        val rootPkg = rootPackageForTest ?: try {
             rootInActiveWindow?.packageName?.toString()
         } catch (_: Exception) {
             null
@@ -255,6 +308,7 @@ class EnterSendService : AccessibilityService() {
     }
 
     private fun windowHints(): List<ForegroundPackage.WindowHint> {
+        windowsForTest?.let { return it }
         val list = try {
             windows
         } catch (_: Exception) {
@@ -281,17 +335,34 @@ class EnterSendService : AccessibilityService() {
             } catch (_: Exception) {
                 0
             }
+            val active = try {
+                w.isActive
+            } catch (_: Exception) {
+                false
+            }
+            val focused = try {
+                w.isFocused
+            } catch (_: Exception) {
+                false
+            }
             try {
                 root.recycle()
             } catch (_: Exception) {
             }
-            ForegroundPackage.WindowHint(pkg, type, layer)
+            // Still record IME/overlay/system rows so resolve can ignore them without
+            // treating a missing APPLICATION list as "use IME root".
+            ForegroundPackage.WindowHint(pkg, type, layer, active = active, focused = focused)
         }
     }
 
     private fun eventSource(type: Int): String = when (type) {
         AccessibilityEvent.TYPE_WINDOWS_CHANGED -> "windows-changed"
-        else -> "window-state"
+        AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> "window-state"
+        AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> "content-changed"
+        AccessibilityEvent.TYPE_VIEW_CLICKED -> "clicked"
+        AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> "text-changed"
+        AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> "selection-changed"
+        else -> "a11y"
     }
 
     override fun onInterrupt() = Unit

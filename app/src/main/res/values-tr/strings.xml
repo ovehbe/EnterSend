@@ -114,6 +114,8 @@
     <string name="setting_usage_fallback">Kullanım erişimi yedek</string>
     <string name="setting_usage_fallback_blurb">İsteğe bağlı. Erişilebilirlik bir uygulama açılışını kaçırırsa önalanı Kullanım Erişimi ile bulur. Varsayılan kapalı.</string>
     <string name="setting_usage_grant">Kullanım erişimini ver</string>
+    <string name="usage_access_card_title">Uygulama algılamayı iyileştir: Kullanım Erişimi ver</string>
+    <string name="usage_access_card_body">İsteğe bağlı. Klavye veya bir katman üstteyken bile EnterSend\'in yeni uygulamaları görmesine yardım eder. İzin verince otomatik açılır.</string>
     <string name="channel_teach_desc">Yeni sohbet uygulamalarında Enter\'ı öğretmek için üstten bildirim</string>
     <string name="prompt_title">Bu uygulamayı öğret?</string>
     <string name="prompt_body">Enter\'ın burada nasıl çalışacağını seçin. Bunu sonra Uygulamalar ekranından değiştirebilirsiniz.</string>
@@ -125,7 +127,7 @@
     <string name="action_ask_again">Açılışta yeniden sor</string>
     <string name="diagnostics_open">Tanılama</string>
     <string name="diagnostics_title">İstem günlüğü</string>
-    <string name="diagnostics_blurb">Son ~100 yeni uygulama istem kararı. Öğretme bildirimi gelmezse kopyalayıp paylaşın.</string>
+    <string name="diagnostics_blurb">Son ~100 istem ve Enter kararı. Öğretme bildirimi gelmezse veya Enter göndermezse kopyalayıp paylaşın.</string>
     <string name="diagnostics_copy">Kopyala</string>
     <string name="diagnostics_share">Paylaş</string>
     <string name="diagnostics_clear">Temizle</string>
