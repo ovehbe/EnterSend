@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.ovehbe.entersend"
+    namespace = "com.meowgi.entersend"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ovehbe.entersend"
+        applicationId = "com.meowgi.entersend"
         minSdk = 29
         targetSdk = 35
         versionCode = 1

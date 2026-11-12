@@ -3,7 +3,7 @@
 Android accessibility service for phones with a physical keyboard (primary target: Unihertz Q25, Android 14).
 In chat text fields, **Enter sends** the message and **Shift+Enter inserts a newline**. Everywhere else Enter behaves normally.
 
-- Package: `com.ovehbe.entersend`
+- Package: `com.meowgi.entersend`
 - Kotlin, Gradle, minSdk 29, targetSdk 35
 - No internet permission; the database and button screenshots are excluded from cloud backup and device transfer.
 
@@ -108,7 +108,7 @@ Rules and crops of uninstalled apps are deleted when the app process starts.
 ## Project layout
 
 ```
-app/src/main/java/com/ovehbe/entersend/
+app/src/main/java/com/meowgi/entersend/
   core/      pure logic: KeyGate (dedupe), ChatFieldGuard, SendFinder, CropMatch, AppLists, TextEdit, Model
   service/   EnterSendService (entry point), EnterHandler (Enter decisions), TeachFlow (cards),
              RuleStore (in-memory rules, background writes), Device/A11yDevice and Overlay/CardOverlay seams

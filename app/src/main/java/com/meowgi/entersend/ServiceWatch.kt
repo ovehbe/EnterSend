@@ -1,0 +1,102 @@
+package com.meowgi.entersend
+
+import android.app.Activity
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.job.JobInfo
+import android.app.job.JobParameters
+import android.app.job.JobScheduler
+import android.app.job.JobService
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
+import com.meowgi.entersend.service.EnterSendService
+import java.util.concurrent.TimeUnit
+
+/** Tells the user when the accessibility service is off or was killed. */
+object ServiceWatch {
+    private const val CHANNEL = "service_state"
+    const val NOTIFICATION_ID = 1
+    private const val JOB_ID = 1
+    /** Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS (API 31+). */
+    const val ACTION_ACCESSIBILITY_DETAILS = "android.settings.ACCESSIBILITY_DETAILS_SETTINGS"
+
+    fun isRunning() = EnterSendService.instance != null
+
+    fun accessibilitySettings(): Intent =
+        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /**
+     * Opens EnterSend's own accessibility page, or the accessibility list if that page doesn't exist.
+     * EXTRA_COMPONENT_NAME must be a [ComponentName], not a flattened string — Settings crashes on
+     * Android 14 if the extra is the wrong type.
+     */
+    fun openAccessibilitySettings(activity: Activity) {
+        if (Build.VERSION.SDK_INT >= 31) {
+            try {
+                // Action added in API 31; pass a ComponentName (not a flattened String) or Settings crashes.
+                activity.startActivity(
+                    Intent(ACTION_ACCESSIBILITY_DETAILS)
+                        .putExtra(
+                            Intent.EXTRA_COMPONENT_NAME,
+                            ComponentName(activity, EnterSendService::class.java),
+                        ),
+                )
+                return
+            } catch (_: Exception) {
+                // Fall through to the accessibility list.
+            }
+        }
+        activity.startActivity(accessibilitySettings())
+    }
+
+    /** Shows a persistent "EnterSend is off" notification while the service isn't running. */
+    fun updateNotice(context: Context, running: Boolean = isRunning()) {
+        val nm = context.getSystemService(NotificationManager::class.java)
+        if (running) {
+            nm.cancel(NOTIFICATION_ID)
+            return
+        }
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL, context.getString(R.string.channel_service), NotificationManager.IMPORTANCE_DEFAULT),
+        )
+        val fix = PendingIntent.getActivity(context, 0, accessibilitySettings(), PendingIntent.FLAG_IMMUTABLE)
+        val notification = Notification.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(context.getString(R.string.service_off_title))
+            .setContentText(context.getString(R.string.service_off_text))
+            .setOngoing(true)
+            .setContentIntent(fix)
+            .addAction(Notification.Action.Builder(null, context.getString(R.string.turn_on), fix).build())
+            .build()
+        try {
+            nm.notify(NOTIFICATION_ID, notification)
+        } catch (_: SecurityException) {
+            // Notification permission denied; the in-app banner still shows.
+        }
+    }
+
+    /** Periodic check so a killed service is noticed even if the app is never opened. */
+    fun schedule(context: Context) {
+        val js = context.getSystemService(JobScheduler::class.java)
+        if (js.getPendingJob(JOB_ID) != null) return
+        js.schedule(
+            JobInfo.Builder(JOB_ID, ComponentName(context, CheckJob::class.java))
+                .setPeriodic(TimeUnit.MINUTES.toMillis(15))
+                .build(),
+        )
+    }
+
+    class CheckJob : JobService() {
+        override fun onStartJob(params: JobParameters?): Boolean {
+            updateNotice(this)
+            return false
+        }
+
+        override fun onStopJob(params: JobParameters?) = false
+    }
+}
