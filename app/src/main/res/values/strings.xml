@@ -28,6 +28,8 @@
     <string name="filter_needs_teaching">Only apps that need teaching</string>
     <string name="filter_show_system_apps">Show system apps</string>
     <string name="loading_apps">Loading apps…</string>
+    <string name="refresh_apps">Refresh</string>
+    <string name="apps_refreshed">App list refreshed</string>
     <string name="no_apps_match">No apps match.</string>
     <string name="blocked_app">EnterSend never acts in browsers, notes or email apps, so Enter always works as usual here.</string>
     <string name="current_choice">%1$s ✓</string>

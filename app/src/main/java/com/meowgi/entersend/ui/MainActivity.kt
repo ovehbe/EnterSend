@@ -8,9 +8,13 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
@@ -28,6 +32,7 @@ import com.meowgi.entersend.R
 import com.meowgi.entersend.ServiceWatch
 import com.meowgi.entersend.core.SystemAppPolicy
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.meowgi.entersend.data.AppCatalog
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.ConfigJson
 import com.meowgi.entersend.data.Mode
@@ -35,6 +40,7 @@ import com.meowgi.entersend.data.ProfileStore
 import com.meowgi.entersend.data.PromptPrefs
 import com.meowgi.entersend.service.EnterSendService
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Material 3 shell: Home status, Apps list, Profiles, Settings.
@@ -55,6 +61,15 @@ class MainActivity : AppCompatActivity() {
     private var rows: List<AppRow>? = null
     private var exportAllProfiles = true
     private val policy by lazy { SystemAppPolicy(this) }
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val filterGeneration = AtomicInteger(0)
+    private var filterRunnable: Runnable? = null
+    private val catalogListener: () -> Unit = { mainHandler.post { reload(forceScan = false) } }
+
+    /** Last search filter timing (adb: EnterSendApps apps_search). */
+    @Volatile
+    var lastSearchMs: Long = -1L
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,18 +142,29 @@ class MainActivity : AppCompatActivity() {
         profileAdapter = ProfileListAdapter(this) { meta -> switchToProfile(meta) }
         findViewById<ListView>(R.id.profiles_list).adapter = profileAdapter
 
+        findViewById<View>(R.id.refresh_apps).setOnClickListener {
+            reload(forceScan = true, toastWhenDone = true)
+        }
+
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-            override fun afterTextChanged(s: Editable?) = applyFilter()
+            override fun afterTextChanged(s: Editable?) = scheduleFilter()
         })
-        needsOnly.setOnCheckedChangeListener { _, _ -> applyFilter() }
-        showSystem.setOnCheckedChangeListener { _, _ -> applyFilter() }
+        // Checkboxes: sync in-memory filter (no PM) so the list updates without debounce jank.
+        needsOnly.setOnCheckedChangeListener { _, _ -> publishFilterSync() }
+        showSystem.setOnCheckedChangeListener { _, _ -> publishFilterSync() }
+
+        app.catalog.addChangeListener(catalogListener)
 
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_home -> pager.displayedChild = 0
-                R.id.nav_apps -> pager.displayedChild = 1
+                R.id.nav_apps -> {
+                    pager.displayedChild = 1
+                    // Second visit: rows already in memory — log and skip PackageManager/Room.
+                    ensureAppsShown()
+                }
                 R.id.nav_profiles -> {
                     pager.displayedChild = 2
                     refreshProfiles()
@@ -172,7 +198,13 @@ class MainActivity : AppCompatActivity() {
         ServiceWatch.updateNotice(this, ServiceWatch.isRunning())
         refreshProfileLabel()
         refreshProfiles()
-        reload()
+        reload(forceScan = false)
+    }
+
+    override fun onDestroy() {
+        filterRunnable?.let { mainHandler.removeCallbacks(it) }
+        app.catalog.removeChangeListener(catalogListener)
+        super.onDestroy()
     }
 
     @Deprecated("Deprecated in Java")
@@ -232,10 +264,10 @@ class MainActivity : AppCompatActivity() {
             // Fallback when the accessibility overlay chooser can't be shown.
             selectTab(1)
             app.io.execute {
-                val loaded = AppRows.load(this, app.db.rules().all(), policy)
+                val loaded = app.catalog.open(app.db.rules().all())
                 runOnUiThread {
                     rows = loaded
-                    applyFilter()
+                    scheduleFilter(immediate = true)
                     loaded.firstOrNull { it.pkg == pkg }?.let { showActions(it) }
                 }
             }
@@ -272,26 +304,108 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.profiles_empty).visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
     }
 
-    private fun reload() {
+    /** Apps tab: if the list is already loaded, show it instantly (second-visit path). */
+    private fun ensureAppsShown() {
+        val t0 = SystemClock.elapsedRealtime()
+        val current = rows
+        if (current != null) {
+            val ms = SystemClock.elapsedRealtime() - t0
+            Log.d(AppCatalog.TAG, "apps_load source=memory ms=$ms count=${current.size}")
+            return
+        }
+        reload(forceScan = false)
+    }
+
+    /**
+     * @param forceScan manual refresh — always hits PackageManager (still no icons).
+     * Otherwise: Room/memory first; rescan only when packages changed.
+     */
+    private fun reload(forceScan: Boolean = false, toastWhenDone: Boolean = false) {
+        // Paint whatever we already have in memory immediately (second visit / tab switch).
+        val warm = app.catalog.memory
+        if (warm.isNotEmpty() && rows == null) {
+            rows = warm
+            scheduleFilter(immediate = true)
+        }
         app.io.execute {
-            val loaded = AppRows.load(this, app.db.rules().all(), policy)
+            val rules = app.db.rules().all()
+            val loaded = if (forceScan) {
+                app.catalog.refresh(rules)
+            } else {
+                app.catalog.open(rules)
+            }
             runOnUiThread {
                 rows = loaded
-                applyFilter()
+                scheduleFilter(immediate = true)
+                if (toastWhenDone) {
+                    Toast.makeText(this, R.string.apps_refreshed, Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
 
-    private fun applyFilter() {
+    /** Immediate in-memory filter on the UI thread (optimistic edits / checkbox toggles). */
+    private fun publishFilterSync() {
+        filterRunnable?.let { mainHandler.removeCallbacks(it) }
         val all = rows
         empty.setText(if (all == null) R.string.loading_apps else R.string.no_apps_match)
-        adapter.submit(
-            if (all == null) {
-                emptyList()
-            } else {
-                AppRows.filter(all, search.text, needsOnly.isChecked, showSystem.isChecked)
-            },
-        )
+        if (all == null) {
+            adapter.submit(emptyList())
+            return
+        }
+        val t0 = SystemClock.elapsedRealtime()
+        val filtered = AppRows.filter(all, search.text, needsOnly.isChecked, showSystem.isChecked)
+        lastSearchMs = SystemClock.elapsedRealtime() - t0
+        Log.d(AppCatalog.TAG, "apps_search q='${search.text}' ms=$lastSearchMs results=${filtered.size} sync=1")
+        empty.setText(R.string.no_apps_match)
+        adapter.submit(filtered)
+    }
+
+    /**
+     * Debounced (~100 ms) filter over the in-memory [rows] snapshot — no PackageManager.
+     * Runs off the main thread while typing. Stale generations are dropped so a refresh
+     * mid-type cannot show the wrong list.
+     */
+    private fun scheduleFilter(immediate: Boolean = false) {
+        filterRunnable?.let { mainHandler.removeCallbacks(it) }
+        val task = Runnable { runFilterOffMain() }
+        filterRunnable = task
+        if (immediate) {
+            mainHandler.post(task)
+        } else {
+            mainHandler.postDelayed(task, SEARCH_DEBOUNCE_MS)
+        }
+    }
+
+    private fun runFilterOffMain() {
+        val all = rows
+        empty.setText(if (all == null) R.string.loading_apps else R.string.no_apps_match)
+        if (all == null) {
+            adapter.submit(emptyList())
+            return
+        }
+        val gen = filterGeneration.incrementAndGet()
+        val query = search.text?.toString().orEmpty()
+        val needs = needsOnly.isChecked
+        val showSys = showSystem.isChecked
+        val snapshot = all
+        app.io.execute {
+            val t0 = SystemClock.elapsedRealtime()
+            val filtered = AppRows.filter(snapshot, query, needs, showSys)
+            val ms = SystemClock.elapsedRealtime() - t0
+            lastSearchMs = ms
+            Log.d(AppCatalog.TAG, "apps_search q='$query' ms=$ms results=${filtered.size}")
+            runOnUiThread {
+                if (gen != filterGeneration.get()) return@runOnUiThread
+                // If rows changed since we snapped, re-filter against the latest.
+                if (rows !== snapshot && rows != null) {
+                    scheduleFilter(immediate = true)
+                    return@runOnUiThread
+                }
+                empty.setText(R.string.no_apps_match)
+                adapter.submit(filtered)
+            }
+        }
     }
 
     private fun showActions(row: AppRow) {
@@ -365,7 +479,7 @@ class MainActivity : AppCompatActivity() {
     private fun applyOptimistic(pkg: String, rule: AppRule, mode: Mode) {
         EnterSendService.instance?.store?.putLocal(rule)
         rows = rows?.map { if (it.pkg == pkg) it.withRule(rule, mode) else it }
-        applyFilter()
+        publishFilterSync()
     }
 
     private fun write(pkg: String, block: () -> AppRule?) {
@@ -573,6 +687,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val KEY_SETUP_DONE = "setup_done"
+        const val SEARCH_DEBOUNCE_MS = 100L
         private const val REQ_EXPORT = 41
         private const val REQ_IMPORT = 42
 

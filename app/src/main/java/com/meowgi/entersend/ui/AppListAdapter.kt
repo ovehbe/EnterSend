@@ -1,22 +1,37 @@
 package com.meowgi.entersend.ui
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.ImageView
 import android.widget.TextView
+import com.meowgi.entersend.EnterSendApp
 import com.meowgi.entersend.R
 import com.meowgi.entersend.data.DisplayMode
+import java.util.concurrent.Executor
 
-class AppListAdapter(private val context: Context) : BaseAdapter() {
+/**
+ * Stable-id list over an immutable snapshot. Icons load lazily per bind (never at scan time)
+ * to avoid OOM / jank on large catalogs.
+ */
+class AppListAdapter(
+    private val context: Context,
+    private val iconExecutor: Executor = (context.applicationContext as? EnterSendApp)?.io
+        ?: java.util.concurrent.Executors.newSingleThreadExecutor(),
+) : BaseAdapter() {
+    /** Immutable snapshot — never mutate in place (avoids ConcurrentModification / flicker). */
     private var rows: List<AppRow> = emptyList()
+    private val main = Handler(Looper.getMainLooper())
 
     /** Skips [notifyDataSetChanged] when the visible content is unchanged (no jank). */
     fun submit(rows: List<AppRow>) {
-        if (sameContent(this.rows, rows)) return
-        this.rows = rows
+        val copy = rows.toList()
+        if (sameContent(this.rows, copy)) return
+        this.rows = copy
         notifyDataSetChanged()
     }
 
@@ -27,8 +42,23 @@ class AppListAdapter(private val context: Context) : BaseAdapter() {
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
         val v = convertView ?: LayoutInflater.from(context).inflate(R.layout.item_app, parent, false)
-        val row = rows[position]
-        v.findViewById<ImageView>(R.id.app_icon).setImageDrawable(row.icon)
+        // Guard against concurrent submit shrinking the list mid-bind.
+        val snapshot = rows
+        if (position < 0 || position >= snapshot.size) return v
+        val row = snapshot[position]
+        val iconView = v.findViewById<ImageView>(R.id.app_icon)
+        iconView.setImageDrawable(row.icon ?: AppIconLoader.getCached(row.pkg))
+        iconView.tag = row.pkg
+        if (row.icon == null && AppIconLoader.getCached(row.pkg) == null) {
+            AppIconLoader.loadAsync(context, row.pkg, iconExecutor) { drawable ->
+                main.post {
+                    if (iconView.tag == row.pkg) {
+                        iconView.setImageDrawable(drawable)
+                    }
+                }
+            }
+        }
+
         v.findViewById<TextView>(R.id.app_name).text = row.label
 
         val mode = context.getString(

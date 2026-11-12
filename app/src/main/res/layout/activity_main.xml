@@ -254,8 +254,17 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:foreground="@drawable/focus_ring"
-                        android:nextFocusDown="@+id/apps"
+                        android:nextFocusDown="@+id/refresh_apps"
                         android:text="@string/filter_show_system_apps" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/refresh_apps"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:foreground="@drawable/focus_ring"
+                        android:nextFocusDown="@+id/apps"
+                        android:text="@string/refresh_apps" />
                 </LinearLayout>
             </HorizontalScrollView>
 

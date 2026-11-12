@@ -3,6 +3,7 @@ package com.meowgi.entersend
 import android.app.Application
 import android.content.pm.PackageManager
 import com.google.android.material.color.DynamicColors
+import com.meowgi.entersend.data.AppCatalog
 import com.meowgi.entersend.data.AppDb
 import com.meowgi.entersend.data.CropFiles
 import java.io.File
@@ -15,11 +16,25 @@ class EnterSendApp : Application() {
     /** Single background thread for every database and file access. */
     val io: ExecutorService = Executors.newSingleThreadExecutor()
 
+    val catalog: AppCatalog by lazy { AppCatalog(this, db.apps(), io) }
+
     override fun onCreate() {
         super.onCreate()
         DynamicColors.applyToActivitiesIfAvailable(this)
-        io.execute { removeUninstalled() }
+        catalog.registerPackageReceiver()
+        io.execute {
+            removeUninstalled()
+            // Seed Room cache if empty so the first Apps visit is already warm when possible.
+            if (db.apps().count() == 0) {
+                catalog.fullScan(db.rules().all())
+            }
+        }
         ServiceWatch.schedule(this)
+    }
+
+    override fun onTerminate() {
+        catalog.unregisterPackageReceiver()
+        super.onTerminate()
     }
 
     /** Deletes rules and crops of apps that are no longer installed, plus orphaned crop files. */
