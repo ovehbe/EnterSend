@@ -124,7 +124,10 @@ class Fix4MarkerPlacementTest {
             device.window = com.meowgi.entersend.core.WindowState(1, 720, 720, false, 2f, 48, 720)
             val s = service(device, db, FakeCrops(), overlay)
             s.teach!!.startTeaching(pkg)
-            s.teach!!.onMissedClick()
+            device.field = device.field!!.copy(text = "x")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg)
             assertTrue(overlay.card is Card.TeachingBar)
             assertFalse(s.teach!!.isCapturing)
 

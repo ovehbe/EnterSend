@@ -56,10 +56,13 @@ class Fix4TeachSessionTest {
         assertTrue("fresh session is step 1", s.teach!!.isStep1)
         assertFalse(s.teach!!.isStep2Bar)
         assertFalse(s.teach!!.isCapturing)
-        assertNull(overlay.card) // step 1: no overlay
+        assertTrue(overlay.card is Card.TeachingBar) // step 1: short top bar
 
-        // Reach step 2.
-        s.teach!!.onMissedClick()
+        // Reach step 2 via send evidence (box emptied).
+        device.field = device.field!!.copy(text = "x")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg)
         assertTrue(s.teach!!.isStep2Bar || s.teach!!.isCapturing)
         assertFalse(s.teach!!.isStep1)
 
@@ -74,13 +77,16 @@ class Fix4TeachSessionTest {
         assertTrue(s.teach!!.isStep1)
         assertFalse(s.teach!!.isStep2Bar)
         assertFalse(s.teach!!.isCapturing)
-        assertNull(overlay.card)
+        assertTrue(overlay.card is Card.TeachingBar)
     }
 
     @Test fun escTimeoutAndRestartAlsoResetToStep1() {
         val s = service(device, db, FakeCrops(), overlay)
         s.teach!!.startTeaching(pkg)
-        s.teach!!.onMissedClick()
+        device.field = device.field!!.copy(text = "x")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg)
         assertFalse(s.teach!!.isStep1)
 
         // Esc
@@ -91,13 +97,16 @@ class Fix4TeachSessionTest {
         assertTrue(s.teach!!.isStep1)
 
         // Safety timeout
-        s.teach!!.onMissedClick()
+        device.field = device.field!!.copy(text = "x")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(TeachFlow.SAFETY_TIMEOUT_MS + 50))
         assertFalse(s.teach!!.isTeaching)
 
         s.teach!!.startTeaching(pkg)
         assertTrue(s.teach!!.isStep1)
-        assertNull(overlay.card)
+        assertTrue(overlay.card is Card.TeachingBar)
     }
 
     @Test fun captureLayerInterceptsSendButtonRegion_notPassThrough() {
@@ -155,7 +164,10 @@ class Fix4TeachSessionTest {
         val s = service(device, db, FakeCrops(), overlay)
         s.teach!!.startTeaching(pkg)
         assertTrue(s.teach!!.isStep1)
-        s.teach!!.onMissedClick()
+        device.field = device.field!!.copy(text = "x")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg)
         device.field = device.field!!.copy(text = "merhaba")
         s.teach!!.promoteCaptureIfReady(pkg)
         assertTrue(s.teach!!.isCapturing)

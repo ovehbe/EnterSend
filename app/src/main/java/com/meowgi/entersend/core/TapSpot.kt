@@ -61,11 +61,17 @@ object TapSpot {
         return null
     }
 
-    /** Point must be inside the window and outside the focused text box. */
-    fun isSafe(point: Pair<Int, Int>, window: WindowState, field: Field?): Boolean {
+    /**
+     * On-screen check only. Do **not** reject points inside [Field.bounds] — in Telegram and
+     * similar apps the compose row's accessibility bounds include the send button, so that
+     * rejection silently dropped every teach tap on send.
+     */
+    fun isOnScreen(point: Pair<Int, Int>, window: WindowState): Boolean {
         val (x, y) = point
-        if (x !in 0 until window.width || y !in 0 until window.height) return false
-        if (field != null && field.bounds.contains(x, y)) return false
-        return true
+        return x in 0 until window.width && y in 0 until window.height
     }
+
+    /** @deprecated use [isOnScreen]; field-bounds rejection was the Q25 teach bug. */
+    fun isSafe(point: Pair<Int, Int>, window: WindowState, field: Field?): Boolean =
+        isOnScreen(point, window)
 }

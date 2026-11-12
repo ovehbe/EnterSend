@@ -150,7 +150,10 @@ class DeviceBugsFixTest {
             android.os.Handler(Looper.getMainLooper()), { 20_000L }, { 1L },
         ) { context().getString(it) }
         teach.startTeaching("com.example.chat")
-        teach.onMissedClick()
+        device.field = device.field!!.copy(text = "x")
+        teach.onTextChanged("com.example.chat")
+        device.field = device.field!!.copy(text = "")
+        teach.onTextChanged("com.example.chat")
         assertTrue(overlay.card is Card.TeachingBar)
         assertEquals(context().getString(R.string.teach_step2), (overlay.card as Card.TeachingBar).message)
         val tr = context().createConfigurationContext(
@@ -170,7 +173,10 @@ class DeviceBugsFixTest {
         val s = start()
         s.teach!!.startTeaching("com.example.chat")
         assertTrue(s.teach!!.isTeaching)
-        s.teach!!.onMissedClick()
+        device.field = device.field!!.copy(text = "x")
+        s.teach!!.onTextChanged("com.example.chat")
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged("com.example.chat")
         assertTrue("card=${overlay.card}", overlay.card is Card.TeachingBar)
     }
 

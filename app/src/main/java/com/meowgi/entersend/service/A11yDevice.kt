@@ -156,6 +156,13 @@ class A11yDevice(private val service: AccessibilityService) : Device {
         vibrator?.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
+    override fun focus(field: Field): Boolean {
+        val n = field.ref as? AccessibilityNodeInfo ?: return false
+        // Prefer accessibility focus + input focus so the next message can be typed immediately.
+        n.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
+        return n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+    }
+
     private fun rootOf(field: Field): AccessibilityNodeInfo? =
         (field.ref as? AccessibilityNodeInfo)?.window?.root ?: service.rootInActiveWindow
 

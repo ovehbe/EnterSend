@@ -70,7 +70,8 @@ class EnterHandler(
     private fun tapSpot(field: Field, rule: AppRule, crop: Pixels?): Boolean {
         val ws = device.windowState(field) ?: return false
         val point = TapSpot.resolve(rule, field, ws, ws.density, ws.keyboardShown)
-        if (point == null || !TapSpot.isSafe(point, ws, field)) {
+        // On-screen only — field.bounds often includes the send button (Telegram row).
+        if (point == null || !TapSpot.isOnScreen(point, ws)) {
             store.markNeedsRecheck(rule.packageName)
             offerTeach(rule)
             return false
@@ -114,6 +115,8 @@ class EnterHandler(
                     inFlight = null
                     store.recordResult(field.packageName, true)
                     device.vibrate()
+                    // Borrowed from Enter2Send: put the caret back so the next message is typeable.
+                    device.focus(field)
                 }
                 else -> {
                     inFlight = null

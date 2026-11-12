@@ -21,6 +21,8 @@ interface Device {
     /** Screenshot of [rect]; null if screenshots are unavailable. Callback on the main thread. */
     fun capture(rect: Box, callback: (Pixels?) -> Unit)
     fun vibrate()
+    /** Restore input focus to the compose box after a successful send. */
+    fun focus(field: Field): Boolean = false
     /** Short on-screen notice (debug toast or send-failed). No-op in headless tests unless recorded. */
     fun notice(message: String) {}
 }

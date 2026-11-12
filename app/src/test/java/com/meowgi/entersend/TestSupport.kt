@@ -68,6 +68,7 @@ class FakeDevice : Device {
 
     val clicks = mutableListOf<NodeSnap>()
     val taps = mutableListOf<Pair<Int, Int>>()
+    val focuses = mutableListOf<Field>()
     var captures = 0
     var imeEnters = 0
     var vibrations = 0
@@ -80,6 +81,12 @@ class FakeDevice : Device {
     override fun click(node: NodeSnap): Boolean {
         clicks += node
         sent()
+        return true
+    }
+
+    override fun focus(field: Field): Boolean {
+        focuses += field
+        this.field = field
         return true
     }
 

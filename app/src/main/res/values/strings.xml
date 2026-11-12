@@ -48,9 +48,12 @@
     <string name="channel_teach">Teach prompts</string>
     <string name="teach_notify_title">Teach Enter for %1$s?</string>
     <string name="teach_notify_text">EnterSend doesn\'t know the send button in this app yet.</string>
+    <string name="teach_step1">Type a message and tap send</string>
     <string name="teach_step2">Didn\'t catch that. Type any text, then tap send once more. (Your first tap may already have sent.)</string>
     <string name="teach_tap_send_spot">Tap where the send button is</string>
     <string name="teach_need_text">Type some text first so the send button is visible</string>
+    <string name="teach_tap_off_screen">That tap was off-screen. Tap the send button.</string>
+    <string name="teach_tap_rejected_window">Couldn\'t read the window. Tap send again.</string>
     <string name="teach_capture_keys">Alt+Y Done · tap again to move · Esc cancel</string>
     <string name="teach_marker_title">Save this send spot?</string>
     <string name="teach_saved">Saved</string>

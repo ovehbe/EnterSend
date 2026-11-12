@@ -175,8 +175,13 @@ class CaptureCoordinateRoundTripTest {
         )
         val s = service(device, db, crops, overlay)
         s.teach!!.startTeaching(pkg)
-        s.teach!!.onMissedClick()
-        // Text already present → capture, whose hint bar edge is TOP for bottom fields.
+        device.field = device.field!!.copy(text = "x")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "hi")
+        s.teach!!.promoteCaptureIfReady(pkg)
+        // Capture hint bar edge is TOP for bottom fields.
         assertTrue(overlay.card is Card.Capture)
         assertEquals(com.meowgi.entersend.core.PopupEdge.TOP, (overlay.card as Card.Capture).barEdge)
     }
@@ -187,7 +192,10 @@ class CaptureCoordinateRoundTripTest {
         device.window = WindowState(1, 720, 720, false, 2f, 48, 720)
         val s = service(device, db, crops, overlay)
         s.teach!!.startTeaching(pkg)
-        s.teach!!.onMissedClick()
+        device.field = device.field!!.copy(text = "x")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg)
         assertTrue(overlay.card is Card.TeachingBar)
         assertEquals(com.meowgi.entersend.core.PopupEdge.TOP, (overlay.card as Card.TeachingBar).edge)
         // Still empty — capture must not open.
@@ -220,8 +228,12 @@ class CaptureCoordinateRoundTripTest {
 
         val s = service(device, db, crops, overlay)
         s.teach!!.startTeaching(pkg)
-        s.teach!!.onMissedClick()
-        // Text non-empty → capture
+        device.field = device.field!!.copy(text = "x")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "hello")
+        s.teach!!.promoteCaptureIfReady(pkg)
         assertTrue(s.teach!!.isCapturing)
         overlay.screenTap(tapX, tapY)
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(50))

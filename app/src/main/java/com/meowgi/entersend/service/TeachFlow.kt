@@ -14,11 +14,11 @@ import com.meowgi.entersend.data.AppRule
 
 /**
  * Two-step teach (Ömer's flow):
- * 1. No overlay — user taps the real send button. Usable node → save immediately + "Saved".
- * 2. If nothing usable within [STEP1_TIMEOUT_MS], show a bar. When the text box is non-empty
- *    again, show a transparent full-screen capture overlay; the tap is consumed (nothing sent).
- *    Screenshot is taken while the overlay is transparent, then a marker is drawn.
- *    Done (Alt+Y) saves; Retry moves the marker; Esc/Back/30s timeout cancel.
+ * 1. Top bar "Type a message and tap send". Usable send node → save immediately + "Saved".
+ *    No timer — stay here until send evidence.
+ * 2. After evidence that a send happened with no usable click (box went non-empty→empty, or a
+ *    click on a node [usableSend] rejects): step-2 bar, then full-screen capture once the box
+ *    has text again. Capture taps are authoritative (no field-bounds reject).
  */
 class TeachFlow(
     private val device: Device,
@@ -38,15 +38,16 @@ class TeachFlow(
 
     private var state: State = Idle
     private val onChoice: (Choice) -> Unit = ::handleChoice
-    private val step1Token = Any()
     private val promoteToken = Any()
+    /** Step 1: compose box was non-empty at least once this session (for empty-after-send evidence). */
+    private var step1SawText = false
 
     val isTeaching: Boolean
         get() = state is Listening || state is RetryBar || state is Capturing || state is Confirming
 
     val isCapturing: Boolean get() = state is Capturing
 
-    /** Step 1: waiting for a real send tap, no overlay. Every new session starts here. */
+    /** Step 1: waiting for a real send tap. Every new session starts here. */
     val isStep1: Boolean get() = state is Listening
 
     /** Step 2 instruction bar ("Didn't catch that…"). */
@@ -59,23 +60,19 @@ class TeachFlow(
      */
     fun startTeaching(pkg: String) {
         resetSession()
-        val listening = Listening(pkg)
-        state = listening
-        main.postAtTime(
-            { if (state === listening) enterStep2(pkg) },
-            step1Token,
-            android.os.SystemClock.uptimeMillis() + STEP1_TIMEOUT_MS,
-        )
+        state = Listening(pkg)
+        step1SawText = false
+        val field = device.focusedField()?.takeIf { it.packageName == pkg }
+        if (field != null && field.text.isNotBlank()) step1SawText = true
+        // Short top bar — not a timer. Step 2 only on send evidence.
+        overlay.show(Card.TeachingBar(strings(R.string.teach_step1), barEdge(field?.bounds, null)), onChoice)
         armSafetyTimeout(pkg)
     }
 
     fun offer(rule: AppRule) {
-        // Prefer the notification path for new apps; keep a silent no-op if already asked/declined.
-        // Always startTeaching (which resets) so we never resume a half-finished step-2 session.
         if (rule.teachDeclined || rule.lastAskedDay == today()) return
         if (state !is Idle) resetSession()
         startTeaching(rule.packageName)
-        // Bookkeeping row only when we actually start teaching from a prompt — not for system defaults.
         store.markAsked(rule.packageName, today())
     }
 
@@ -100,11 +97,12 @@ class TeachFlow(
     }
 
     fun onTextChanged(pkg: String) {
+        watchStep1Text(pkg)
         promoteCaptureIfReady(pkg)
     }
 
-    /** Also called on window-content changes — Telegram sometimes delays TEXT_CHANGED. */
     fun onContentChanged(pkg: String) {
+        watchStep1Text(pkg)
         promoteCaptureIfReady(pkg)
     }
 
@@ -115,29 +113,28 @@ class TeachFlow(
                 if (usableSend(node)) {
                     saveNodeRule(pkg, node)
                 } else {
-                    // First tap wasn't a readable send node — step 2.
+                    // Click arrived on a node we cannot use as send — step 2.
                     enterStep2(pkg)
                 }
             }
-            is RetryBar -> {
-                // Tap went to the app (TeachingBar is not full-screen). Promote immediately so
-                // the next attempt is captured; this click itself cannot be undone.
-                promoteCaptureIfReady(s.pkg)
-            }
-            is Capturing -> Unit // full-screen overlay consumes the teach tap
+            is RetryBar -> promoteCaptureIfReady(s.pkg)
+            is Capturing -> Unit
             else -> Unit
         }
     }
 
     fun onMissedClick() {
         when (val s = state) {
-            is Listening -> enterStep2(s.pkg)
+            is Listening -> {
+                // Null click source alone is not enough; need send evidence (had text, now empty).
+                val field = device.focusedField()?.takeIf { it.packageName == s.pkg }
+                if (step1SawText && (field == null || field.text.isBlank())) enterStep2(s.pkg)
+            }
             is RetryBar -> promoteCaptureIfReady(s.pkg)
             else -> Unit
         }
     }
 
-    /** If step-2 is waiting and the focused box has text, open the capturing layer now. */
     fun promoteCaptureIfReady(pkg: String? = null) {
         val bar = state as? RetryBar ?: return
         if (pkg != null && bar.pkg != pkg) return
@@ -150,7 +147,6 @@ class TeachFlow(
         val capturing = state as? Capturing ?: return
         val field = device.focusedField()?.takeIf { it.packageName == capturing.pkg }
         if (field == null || field.text.isBlank()) {
-            // Never save a tap spot from an empty box — hint bar only, capture stays up.
             val edge = barEdge(field?.bounds, null)
             overlay.show(
                 Card.Capture(null, null, strings(R.string.teach_need_text), edge, field?.bounds),
@@ -158,10 +154,17 @@ class TeachFlow(
             )
             return
         }
-        val ws = device.windowState(field) ?: return
-        if (!TapSpot.isSafe(x to y, ws, field)) return
+        val ws = device.windowState(field)
+        if (ws == null) {
+            showCaptureReject(capturing.pkg, field.bounds, strings(R.string.teach_tap_rejected_window))
+            return
+        }
+        // Authoritative teach tap: on-screen only. Never reject because field.bounds contains the point.
+        if (!TapSpot.isOnScreen(x to y, ws)) {
+            showCaptureReject(capturing.pkg, field.bounds, strings(R.string.teach_tap_off_screen))
+            return
+        }
 
-        // Remove overlay so the crop isn't polluted, screenshot, then show marker.
         overlay.setTapListener(null)
         overlay.hide()
         val cropRect = TapSpot.cropBox(x, y, ws)
@@ -176,21 +179,29 @@ class TeachFlow(
                 Card.Capture(x, y, strings(R.string.teach_capture_keys), edge, field.bounds),
                 onChoice,
             )
-            overlay.setTapListener { nx, ny -> onCaptureTap(nx, ny) } // Retry by tapping again
+            overlay.setTapListener { nx, ny -> onCaptureTap(nx, ny) }
         }
     }
 
     fun forceClose() = resetSession()
 
-    /**
-     * Clears step, timers, capture listener, marker overlay and pending promote poll.
-     * Used on every session start and every session end (Cancel / Esc / timeout / restart).
-     */
     private fun resetSession() {
         clearTimeouts()
         state = Idle
+        step1SawText = false
         overlay.setTapListener(null)
         overlay.hide()
+    }
+
+    /** Box went non-empty → empty while listening = send with no usable click node. */
+    private fun watchStep1Text(pkg: String) {
+        val listening = state as? Listening ?: return
+        if (listening.pkg != pkg) return
+        val field = device.focusedField()?.takeIf { it.packageName == pkg }
+        when {
+            field != null && field.text.isNotBlank() -> step1SawText = true
+            step1SawText && (field == null || field.text.isBlank()) -> enterStep2(pkg)
+        }
     }
 
     private fun enterStep2(pkg: String) {
@@ -198,15 +209,12 @@ class TeachFlow(
         state = RetryBar(pkg)
         overlay.setTapListener(null)
         val field = device.focusedField()?.takeIf { it.packageName == pkg }
-        // Type-something bar: WRAP_CONTENT at top. Not full-screen / not focusable so typing works.
-        // Capture layer takes over the moment the box has text (see promoteCaptureIfReady).
         overlay.show(Card.TeachingBar(strings(R.string.teach_step2), barEdge(field?.bounds, null)), onChoice)
         armSafetyTimeout(pkg)
         armPromotePoll(pkg)
         promoteCaptureIfReady(pkg)
     }
 
-    /** Poll while RetryBar — some messengers delay or skip TYPE_VIEW_TEXT_CHANGED. */
     private fun armPromotePoll(pkg: String) {
         main.postAtTime(
             {
@@ -231,6 +239,12 @@ class TeachFlow(
         )
         overlay.setTapListener { x, y -> onCaptureTap(x, y) }
         armSafetyTimeout(pkg)
+    }
+
+    private fun showCaptureReject(pkg: String, fieldBounds: Box?, reason: String) {
+        val edge = barEdge(fieldBounds, null)
+        overlay.show(Card.Capture(null, null, reason, edge, fieldBounds), onChoice)
+        overlay.setTapListener { x, y -> onCaptureTap(x, y) }
     }
 
     private fun barEdge(field: Box?, tap: Pair<Int, Int>?): PopupEdge {
@@ -275,7 +289,6 @@ class TeachFlow(
             sendText = target.text,
             sendDesc = target.desc,
             sendClassPath = target.classPath,
-            // Clear tap-spot fields when a node rule is enough.
             tapX = null, tapY = null, tapDxDp = null, tapDyDp = null, tapFx = null, tapFy = null,
             cropPath = null, cropLeft = null, cropTop = null, cropRight = null, cropBottom = null,
             orientation = null, windowWidth = null, windowHeight = null, keyboardShown = null,
@@ -293,7 +306,7 @@ class TeachFlow(
         val y = capturing.markerY ?: return
         val crop = capturing.crop ?: return
         val field = device.focusedField()?.takeIf { it.packageName == capturing.pkg }
-        if (field == null || field.text.isBlank()) return // never save from empty box
+        if (field == null || field.text.isBlank()) return
         val ws = device.windowState(field) ?: return
         val density = ws.density
         val old = store.get(capturing.pkg)?.rule ?: AppRule(capturing.pkg)
@@ -354,14 +367,12 @@ class TeachFlow(
 
     private fun clearTimeouts() {
         main.removeCallbacks(safetyRunnable)
-        main.removeCallbacksAndMessages(step1Token)
         main.removeCallbacksAndMessages(promoteToken)
     }
 
     private fun finish() = resetSession()
 
     companion object {
-        const val STEP1_TIMEOUT_MS = 2_000L
         const val SAFETY_TIMEOUT_MS = 30_000L
         const val SAVED_MS = 1_500L
         const val PROMOTE_POLL_MS = 150L

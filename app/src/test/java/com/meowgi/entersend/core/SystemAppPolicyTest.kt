@@ -26,9 +26,11 @@ class SystemAppPolicyTest {
         policy = SystemAppPolicy(context)
     }
 
-    @Test fun enterSendItselfIsAlwaysOff() {
-        assertTrue(policy.isAlwaysOff(context.packageName))
-        assertEquals(Mode.OFF, policy.resolveMode(AppRule(context.packageName)))
+    @Test fun enterSendItselfIsNotAlwaysOffButNeverPrompted() {
+        // Setup test chat needs Enter; ChatFieldGuard still skips our Settings search box.
+        assertFalse(policy.isAlwaysOff(context.packageName))
+        assertEquals(Mode.AUTO, policy.resolveMode(AppRule(context.packageName)))
+        assertFalse(policy.mayPrompt(context.packageName))
     }
 
     @Test fun systemUiAlwaysOffNoPrompt() {

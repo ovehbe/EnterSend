@@ -14,7 +14,9 @@ import com.meowgi.entersend.data.Mode
  * Settings override (or teach / ask bookkeeping the user triggered) creates a row.
  * Existing rows keep whatever [AppRule.mode] they already have.
  *
- * Always Off: SystemUI, current home, every enabled IME, Settings, EnterSend itself.
+ * Always Off: SystemUI, current home, every enabled IME, Settings.
+ * EnterSend itself is **not** always-off — the setup test chat needs Enter; non-chat fields
+ * in our UI are still skipped by [ChatFieldGuard]. We never prompt to teach ourselves.
  * Off by default, no notification: FLAG_SYSTEM packages with no launcher icon.
  * Everything with a launcher icon behaves normally (system or not) — Google Messages, stock SMS.
  */
@@ -22,7 +24,7 @@ class SystemAppPolicy(private val context: Context) {
     private val pm: PackageManager get() = context.packageManager
 
     fun isAlwaysOff(pkg: String): Boolean {
-        if (pkg == context.packageName) return true
+        // Not ourselves: SetupActivity's test compose box must receive Enter → send.
         if (isSystemUi(pkg)) return true
         if (pkg == homePackage()) return true
         if (pkg in enabledImePackages()) return true
@@ -57,7 +59,8 @@ class SystemAppPolicy(private val context: Context) {
     /** Defaults Off with no prompt — always-off list or hidden system app. */
     fun defaultsOff(pkg: String): Boolean = isAlwaysOff(pkg) || isHiddenSystemApp(pkg)
 
-    fun mayPrompt(pkg: String): Boolean = !defaultsOff(pkg)
+    fun mayPrompt(pkg: String): Boolean =
+        pkg != context.packageName && !defaultsOff(pkg)
 
     /**
      * Resolves the effective mode. A non-null [AppRule.mode] (manual override / prior row)

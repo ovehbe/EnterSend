@@ -139,7 +139,7 @@ class Fix2BehaviorTest {
         device.root = window(send)
         val s = start()
         s.teach!!.startTeaching(pkg)
-        assertNull(overlay.card) // step 1: no overlay
+        assertTrue(overlay.card is Card.TeachingBar) // step 1: short top bar
         s.teach!!.onClicked(pkg, send)
         assertTrue(overlay.card is Card.Saved)
         assertEquals("$pkg:id/go", db.rules().get(pkg)!!.sendViewId)
@@ -153,7 +153,10 @@ class Fix2BehaviorTest {
         device.live = solid(0xFF2196F3.toInt(), 80, 80)
         val s = start()
         s.teach!!.startTeaching(pkg)
-        s.teach!!.onMissedClick() // step2 bar
+        device.field = device.field!!.copy(text = "x")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg) // step2 bar
         assertTrue(overlay.card is Card.TeachingBar)
         // Force capture with empty field
         s.teach!!.onCaptureTap(650, 640)
@@ -168,8 +171,12 @@ class Fix2BehaviorTest {
         device.live = solid(0xFF2196F3.toInt(), 80, 80)
         val s = start()
         s.teach!!.startTeaching(pkg)
-        s.teach!!.onMissedClick()
+        device.field = device.field!!.copy(text = "x")
         s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "hello")
+        s.teach!!.promoteCaptureIfReady(pkg)
         assertTrue(overlay.card is Card.Capture)
         overlay.screenTap(650, 640)
         idle(100)
@@ -186,8 +193,12 @@ class Fix2BehaviorTest {
         device.field = chatField("hi", pkg = pkg, viewId = "$pkg:id/message_input", hint = null)
         val s = start()
         s.teach!!.startTeaching(pkg)
-        s.teach!!.onMissedClick()
+        device.field = device.field!!.copy(text = "x")
         s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "")
+        s.teach!!.onTextChanged(pkg)
+        device.field = device.field!!.copy(text = "hi")
+        s.teach!!.promoteCaptureIfReady(pkg)
         assertTrue(s.teach!!.isCapturing)
         idle(30_100)
         assertFalse(s.teach!!.isTeaching)
@@ -270,7 +281,9 @@ class Fix2BehaviorTest {
     @Test fun tapSpotUnsafePointInsideFieldIsRejected() {
         val field = FIELD_BOX
         val ws = WindowState(1, 720, 720, false, 1f)
-        assertFalse(TapSpot.isSafe(field.centerX to field.centerY, ws, chatField("x")))
-        assertTrue(TapSpot.isSafe(650 to 640, ws, chatField("x")))
+        // Field-bounds rejection removed — taps inside the compose row (incl. send) are valid.
+        assertTrue(TapSpot.isOnScreen(field.centerX to field.centerY, ws))
+        assertTrue(TapSpot.isOnScreen(650 to 640, ws))
+        assertFalse(TapSpot.isOnScreen(900 to 900, ws))
     }
 }

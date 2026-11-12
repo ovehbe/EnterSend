@@ -48,9 +48,12 @@
     <string name="channel_teach">Öğretme istemleri</string>
     <string name="teach_notify_title">%1$s için Enter öğretilsin mi?</string>
     <string name="teach_notify_text">EnterSend bu uygulamadaki gönder düğmesini henüz bilmiyor.</string>
+    <string name="teach_step1">Bir mesaj yazıp gönder düğmesine dokunun</string>
     <string name="teach_step2">Yakalayamadım. Biraz yazıp gönder düğmesine bir kez daha dokunun. (İlk dokunuşunuz zaten göndermiş olabilir.)</string>
     <string name="teach_tap_send_spot">Gönder düğmesinin olduğu yere dokunun</string>
     <string name="teach_need_text">Önce biraz yazın ki gönder düğmesi görünsün</string>
+    <string name="teach_tap_off_screen">Dokunuş ekran dışındaydı. Gönder düğmesine dokunun.</string>
+    <string name="teach_tap_rejected_window">Pencere okunamadı. Gönder düğmesine yeniden dokunun.</string>
     <string name="teach_capture_keys">Alt+Y Bitti · taşımak için yeniden dokun · Esc iptal</string>
     <string name="teach_marker_title">Bu gönder noktası kaydedilsin mi?</string>
     <string name="teach_saved">Kaydedildi</string>
