@@ -24,6 +24,7 @@ class EnterHandler(
     private val offerTeach: (AppRule) -> Unit,
     private val debug: Boolean = false,
     private val strings: (Int) -> String = { "" },
+    private val resolveMode: (AppRule) -> Mode = { it.effectiveMode },
 ) {
     private var inFlight: Any? = null
 
@@ -32,7 +33,7 @@ class EnterHandler(
         val field = device.focusedField() ?: return false
         val state = store.get(field.packageName) ?: return false
         val rule = state.rule
-        val mode = rule.effectiveMode
+        val mode = resolveMode(rule)
         if (mode == Mode.OFF || mode == Mode.PASS_THROUGH) return false
         if (!ChatFieldGuard.isChatLike(field, rule)) return false
 
@@ -84,6 +85,10 @@ class EnterHandler(
         device.capture(rect) { live ->
             if (inFlight !== token) return@capture
             if (live != null && CropMatch.matches(crop, live)) {
+                android.util.Log.d(
+                    "EnterSend",
+                    "gesture screen=(${point.first},${point.second}) saved=(${rule.tapX},${rule.tapY})",
+                )
                 device.tap(point.first, point.second)
                 if (debug) device.notice(strings(com.meowgi.entersend.R.string.debug_send_tap))
                 verify(field, viaTap = true, token = token)

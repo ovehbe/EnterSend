@@ -61,11 +61,16 @@ class NodeSnap(
 
 data class WindowState(
     val orientation: Int,
+    /** Full display size in screen pixels (same space as raw touch / gesture / node bounds). */
     val width: Int,
     val height: Int,
     val keyboardShown: Boolean = false,
     /** Display density (dpi/160), used to convert dp anchors to pixels. */
     val density: Float = 1f,
+    /** Y just below the status bar / cutout, in screen pixels. */
+    val statusBarBottom: Int = 0,
+    /** Y of the IME top, or [height] when the keyboard is hidden. */
+    val keyboardTop: Int = height,
 )
 
 class Pixels(val width: Int, val height: Int, val argb: IntArray) {

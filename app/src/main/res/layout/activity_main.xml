@@ -87,8 +87,16 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
-        android:nextFocusDown="@+id/apps"
+        android:nextFocusDown="@+id/show_system_apps"
         android:text="@string/filter_needs_teaching" />
+
+    <CheckBox
+        android:id="@+id/show_system_apps"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:nextFocusDown="@+id/apps"
+        android:text="@string/filter_show_system_apps" />
 
     <FrameLayout
         android:layout_width="match_parent"

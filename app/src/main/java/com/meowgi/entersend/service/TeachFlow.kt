@@ -6,6 +6,8 @@ import com.meowgi.entersend.R
 import com.meowgi.entersend.core.Box
 import com.meowgi.entersend.core.NodeSnap
 import com.meowgi.entersend.core.Pixels
+import com.meowgi.entersend.core.PopupEdge
+import com.meowgi.entersend.core.PopupPlacement
 import com.meowgi.entersend.core.SendFinder
 import com.meowgi.entersend.core.TapSpot
 import com.meowgi.entersend.data.AppRule
@@ -58,6 +60,7 @@ class TeachFlow(
         // Prefer the notification path for new apps; keep a silent no-op if already asked/declined.
         if (state !is Idle || rule.teachDeclined || rule.lastAskedDay == today()) return
         startTeaching(rule.packageName)
+        // Bookkeeping row only when we actually start teaching from a prompt — not for system defaults.
         store.markAsked(rule.packageName, today())
     }
 
@@ -109,13 +112,17 @@ class TeachFlow(
         if (s is Listening) enterStep2(s.pkg)
     }
 
-    /** Screen tap on the transparent capture overlay. */
+    /** Screen tap on the transparent capture overlay. Coordinates are screen pixels. */
     fun onCaptureTap(x: Int, y: Int) {
         val capturing = state as? Capturing ?: return
         val field = device.focusedField()?.takeIf { it.packageName == capturing.pkg }
         if (field == null || field.text.isBlank()) {
-            // Never save a tap spot from an empty box.
-            overlay.show(Card.Capture(null, null, strings(R.string.teach_need_text)), onChoice)
+            // Never save a tap spot from an empty box — hint bar only, capture stays up.
+            val edge = barEdge(field?.bounds, null)
+            overlay.show(
+                Card.Capture(null, null, strings(R.string.teach_need_text), edge, field?.bounds),
+                onChoice,
+            )
             return
         }
         val ws = device.windowState(field) ?: return
@@ -130,7 +137,12 @@ class TeachFlow(
             capturing.markerX = x
             capturing.markerY = y
             capturing.crop = pixels
-            overlay.show(Card.Capture(x, y, strings(R.string.teach_capture_keys)), onChoice)
+            android.util.Log.d("EnterSend", "capture saved raw=($x,$y)")
+            val edge = barEdge(field.bounds, x to y)
+            overlay.show(
+                Card.Capture(x, y, strings(R.string.teach_capture_keys), edge, field.bounds),
+                onChoice,
+            )
             overlay.setTapListener { nx, ny -> onCaptureTap(nx, ny) } // Retry by tapping again
         }
     }
@@ -141,19 +153,42 @@ class TeachFlow(
         clearTimeouts()
         state = RetryBar(pkg)
         overlay.setTapListener(null)
-        overlay.show(Card.TeachingBar(strings(R.string.teach_step2)), onChoice)
-        armSafetyTimeout(pkg)
-        // If text is already non-empty, open capture immediately.
         val field = device.focusedField()?.takeIf { it.packageName == pkg }
+        // Type-something bar: WRAP_CONTENT at top (or bottom if field is top-half). Not full-screen,
+        // not focusable — physical keyboard / taps outside still reach the app.
+        overlay.show(Card.TeachingBar(strings(R.string.teach_step2), barEdge(field?.bounds, null)), onChoice)
+        armSafetyTimeout(pkg)
+        // Capture layer only once the focused box has text.
         if (field != null && field.text.isNotBlank()) showCapture(pkg)
     }
 
     private fun showCapture(pkg: String) {
         val capturing = Capturing(pkg)
         state = capturing
-        overlay.show(Card.Capture(null, null, strings(R.string.teach_tap_send_spot)), onChoice)
+        val field = device.focusedField()?.takeIf { it.packageName == pkg }
+        val edge = barEdge(field?.bounds, null)
+        overlay.show(
+            Card.Capture(null, null, strings(R.string.teach_tap_send_spot), edge, field?.bounds),
+            onChoice,
+        )
         overlay.setTapListener { x, y -> onCaptureTap(x, y) }
         armSafetyTimeout(pkg)
+    }
+
+    private fun barEdge(field: Box?, tap: Pair<Int, Int>?): PopupEdge {
+        val f = field ?: device.focusedField()?.bounds
+        val ws = device.focusedField()?.let { device.windowState(it) }
+        val screenH = ws?.height ?: 720
+        val status = ws?.statusBarBottom ?: 0
+        val keyTop = ws?.keyboardTop ?: screenH
+        return PopupPlacement.place(
+            screenHeight = screenH,
+            statusBarBottom = status,
+            keyboardTop = keyTop,
+            popupHeight = 160,
+            field = f,
+            tapSpot = tap,
+        ).edge
     }
 
     private fun usableSend(node: NodeSnap): Boolean {
@@ -190,7 +225,7 @@ class TeachFlow(
         store.saveTaught(rule, null)
         state = Idle
         overlay.setTapListener(null)
-        overlay.show(Card.Saved(target.desc ?: target.text), onChoice)
+        overlay.show(Card.Saved(target.desc ?: target.text, barEdge(field?.bounds, null)), onChoice)
         main.postDelayed({ if (state is Idle) overlay.hide() }, SAVED_MS)
         clearTimeouts()
     }
@@ -237,8 +272,7 @@ class TeachFlow(
                 Choice.YES -> saveCapture(s)
                 Choice.RETRY -> {
                     s.markerX = null; s.markerY = null; s.crop = null
-                    overlay.show(Card.Capture(null, null, strings(R.string.teach_tap_send_spot)), onChoice)
-                    overlay.setTapListener { x, y -> onCaptureTap(x, y) }
+                    showCapture(s.pkg)
                 }
                 Choice.CLOSE, Choice.NO -> finish()
             }

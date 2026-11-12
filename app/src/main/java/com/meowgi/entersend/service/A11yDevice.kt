@@ -40,20 +40,45 @@ class A11yDevice(private val service: AccessibilityService) : Device {
     override fun windowRoot(field: Field): NodeSnap? = rootOf(field)?.let { snap(it, 0, intArrayOf(0)) }
 
     override fun windowState(field: Field): WindowState? {
-        val root = rootOf(field) ?: return null
-        val b = boundsOf(root)
-        val density = service.resources.displayMetrics.density
+        // Always use the full display in screen pixels — the same space as MotionEvent raw
+        // coordinates, getBoundsInScreen, and dispatchGesture. App-window bounds alone omit
+        // the status bar and break tap round-trips on inset displays (e.g. Q25 720×720).
+        val dm = service.resources.displayMetrics
+        val density = dm.density
+        val statusBarBottom = try {
+            val resId = service.resources.getIdentifier("status_bar_height", "dimen", "android")
+            if (resId > 0) service.resources.getDimensionPixelSize(resId) else 0
+        } catch (_: RuntimeException) {
+            0
+        }
         val keyboard = try {
             service.windows?.any { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD } == true
         } catch (_: SecurityException) {
             false
         }
+        val keyboardTop = if (keyboard) {
+            try {
+                service.windows
+                    ?.firstOrNull { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+                    ?.let { w ->
+                        val r = android.graphics.Rect()
+                        w.getBoundsInScreen(r)
+                        r.top
+                    } ?: (dm.heightPixels * 2 / 3)
+            } catch (_: SecurityException) {
+                dm.heightPixels * 2 / 3
+            }
+        } else {
+            dm.heightPixels
+        }
         return WindowState(
             orientation = service.resources.configuration.orientation,
-            width = b.width,
-            height = b.height,
+            width = dm.widthPixels,
+            height = dm.heightPixels,
             keyboardShown = keyboard,
             density = density,
+            statusBarBottom = statusBarBottom,
+            keyboardTop = keyboardTop,
         )
     }
 

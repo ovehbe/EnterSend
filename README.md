@@ -46,8 +46,14 @@ The main screen lists launchable apps (apps EnterSend has data for come first) w
 health dot (grey: no sends yet, green: at least 80 % confirmed, yellow: at least 50 %, red: worse).
 Search by name or package; "Only apps that need teaching" shows apps where Enter found no send button,
 that fail often, or that were updated since they were taught ("Needs re-check after update").
+System apps are hidden until you check **Show system apps**. Runtime defaults (no DB row): SystemUI,
+home, IMEs, Settings, and EnterSend itself are always Off; other `FLAG_SYSTEM` packages without a
+launcher icon default Off and never prompt; anything with a launcher icon (including Google Messages)
+behaves normally. Only a manual Settings override writes a mode row; existing rows keep their mode.
 Select an app for: Teach / Re-teach, mode Auto (auto-detect only), Learned (taught rule, then auto-detect,
 then tap spot), Pass-through (Enter goes to the app), Off, and Reset (forget the app and its crop).
+Teach / Done cards sit at the **top** of the screen by default (bottom only when the focused field is
+in the top half), so they never cover the send button or keyboard.
 Browsers, notes and email apps are listed as "Never" and cannot be enabled.
 
 If the service is off or was killed, a red banner appears at the top of the app and a persistent notification

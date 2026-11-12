@@ -26,6 +26,7 @@
     <string name="search_apps">Uygulama ara</string>
     <string name="open_setup">Kurulum ve test</string>
     <string name="filter_needs_teaching">Yalnızca öğretilmesi gereken uygulamalar</string>
+    <string name="filter_show_system_apps">Sistem uygulamalarını göster</string>
     <string name="loading_apps">Uygulamalar yükleniyor…</string>
     <string name="no_apps_match">Eşleşen uygulama yok.</string>
     <string name="blocked_app">EnterSend tarayıcılarda, not ve e-posta uygulamalarında hiçbir şey yapmaz; burada Enter her zamanki gibi çalışır.</string>

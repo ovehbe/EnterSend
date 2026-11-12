@@ -10,27 +10,31 @@ import android.content.pm.PackageManager
 import android.os.Build
 import com.meowgi.entersend.R
 import com.meowgi.entersend.core.AppLists
+import com.meowgi.entersend.core.SystemAppPolicy
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.Mode
 
 /**
  * One "Teach Enter for <app>?" notification per package per day for apps with no rule and no
- * previous answer. Never for pass-through / Off / declined / blocked packages.
+ * previous answer. Never for pass-through / Off / declined / blocked / system-default-off packages.
+ * Does not create DB rows for system defaults — [RuleStore.markAsked] only runs when we actually post.
  */
 class NewAppNotifier(
     private val context: Context,
     private val store: RuleStore,
     private val today: () -> Long,
+    private val policy: SystemAppPolicy = SystemAppPolicy(context),
 ) {
     private val nm = context.getSystemService(NotificationManager::class.java)
 
     fun onAppSeen(pkg: String, rule: AppRule) {
         if (pkg == context.packageName) return
         if (pkg in AppLists.NEVER || pkg in AppLists.NATIVE_ENTER) return
+        if (!policy.mayPrompt(pkg)) return
         if (rule.teachDeclined || rule.isTaught) return
-        if (rule.effectiveMode == Mode.OFF || rule.effectiveMode == Mode.PASS_THROUGH) return
+        val mode = policy.resolveMode(rule)
+        if (mode == Mode.OFF || mode == Mode.PASS_THROUGH) return
         if (rule.lastAskedDay == today()) return
-        // Password fields are handled by not calling this from a password focus; package-level gate only.
 
         store.markAsked(pkg, today())
         post(pkg)

@@ -5,7 +5,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import com.meowgi.entersend.core.AppLists
+import com.meowgi.entersend.core.SystemAppPolicy
 import com.meowgi.entersend.data.AppRule
+import com.meowgi.entersend.data.DisplayMode
 import com.meowgi.entersend.data.Mode
 import java.util.Locale
 
@@ -18,11 +20,12 @@ class AppRow(
     val rule: AppRule,
     /** Installed versionCode, null if unknown. */
     val versionCode: Long?,
+    val mode: Mode,
+    val isSystemApp: Boolean,
 ) {
-    val mode: Mode get() = rule.effectiveMode
     val blocked: Boolean get() = pkg in AppLists.NEVER
 
-    /** EnterSend has data for this app. */
+    /** EnterSend has data for this app (a real DB row with user-visible state). */
     val seen: Boolean
         get() = rule.isTaught || rule.mode != null || rule.lastAskedDay != null ||
             rule.successCount + rule.failureCount > 0
@@ -51,11 +54,21 @@ class AppRow(
             if (needsRecheck || health == Health.BAD) return true
             return !rule.isTaught && (rule.lastAskedDay != null || rule.failureCount > 0)
         }
+
+    val displayMode: DisplayMode
+        get() = when {
+            blocked -> DisplayMode.NEVER
+            mode == Mode.OFF -> DisplayMode.OFF
+            mode == Mode.PASS_THROUGH -> DisplayMode.PASS_THROUGH
+            rule.hasNodeRule -> DisplayMode.BUTTON
+            rule.hasTapSpot -> DisplayMode.TAP_SPOT
+            else -> DisplayMode.AUTO
+        }
 }
 
 object AppRows {
     /** Launchable apps plus apps with a saved rule. Touches the package manager; call off the main thread. */
-    fun load(context: Context, rules: List<AppRule>): List<AppRow> {
+    fun load(context: Context, rules: List<AppRule>, policy: SystemAppPolicy = SystemAppPolicy(context)): List<AppRow> {
         val pm = context.packageManager
         val byPkg = rules.associateBy { it.packageName }
         val launchable = pm.queryIntentActivities(
@@ -67,20 +80,32 @@ object AppRows {
             } catch (_: PackageManager.NameNotFoundException) {
                 null
             }
+            val rule = byPkg[pkg] ?: AppRule(pkg)
             AppRow(
                 pkg = pkg,
                 label = info?.applicationInfo?.loadLabel(pm)?.toString() ?: pkg,
                 icon = info?.applicationInfo?.loadIcon(pm),
-                rule = byPkg[pkg] ?: AppRule(pkg),
+                rule = rule,
                 versionCode = info?.longVersionCode,
+                mode = policy.resolveMode(rule),
+                isSystemApp = policy.isSystemApp(pkg),
             )
         }
     }
 
-    /** Apps EnterSend has seen first, then alphabetical; narrowed by [query] and [needsTeachingOnly]. */
-    fun filter(rows: List<AppRow>, query: CharSequence, needsTeachingOnly: Boolean): List<AppRow> {
+    /**
+     * Apps EnterSend has seen first, then alphabetical; narrowed by [query], [needsTeachingOnly],
+     * and [showSystemApps] (system packages hidden unless checked).
+     */
+    fun filter(
+        rows: List<AppRow>,
+        query: CharSequence,
+        needsTeachingOnly: Boolean,
+        showSystemApps: Boolean = false,
+    ): List<AppRow> {
         val q = query.trim().toString().lowercase(Locale.ROOT)
         return rows
+            .filter { showSystemApps || !it.isSystemApp }
             .filter { !needsTeachingOnly || it.needsTeaching }
             .filter { q.isEmpty() || q in it.label.lowercase(Locale.ROOT) || q in it.pkg.lowercase(Locale.ROOT) }
             .sortedWith(compareBy({ !it.seen }, { it.label.lowercase(Locale.ROOT) }))

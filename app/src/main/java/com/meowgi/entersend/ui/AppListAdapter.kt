@@ -29,7 +29,7 @@ class AppListAdapter(private val context: Context) : BaseAdapter() {
         v.findViewById<TextView>(R.id.app_name).text = row.label
 
         val mode = context.getString(
-            when (row.rule.displayMode) {
+            when (row.displayMode) {
                 DisplayMode.NEVER -> R.string.mode_never
                 DisplayMode.OFF -> R.string.mode_off
                 DisplayMode.PASS_THROUGH -> R.string.mode_pass_through

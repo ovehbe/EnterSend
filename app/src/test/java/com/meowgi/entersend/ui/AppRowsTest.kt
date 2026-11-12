@@ -1,5 +1,6 @@
 package com.meowgi.entersend.ui
 
+import com.meowgi.entersend.core.AppLists
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.Mode
 import org.junit.Assert.assertEquals
@@ -8,8 +9,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppRowsTest {
-    private fun row(rule: AppRule, label: String = rule.packageName, version: Long? = 10) =
-        AppRow(rule.packageName, label, null, rule, version)
+    private fun row(
+        rule: AppRule,
+        label: String = rule.packageName,
+        version: Long? = 10,
+        isSystemApp: Boolean = false,
+    ): AppRow {
+        val mode = rule.mode?.let { name -> Mode.entries.first { it.name == name } }
+            ?: when {
+                rule.packageName in AppLists.NATIVE_ENTER -> Mode.PASS_THROUGH
+                rule.isTaught -> Mode.LEARNED
+                else -> Mode.AUTO
+            }
+        return AppRow(rule.packageName, label, null, rule, version, mode, isSystemApp)
+    }
 
     private val taught = AppRule("com.whatsapp", sendViewId = "com.whatsapp:id/send", taughtVersionCode = 10)
 
@@ -46,5 +59,17 @@ class AppRowsTest {
         assertEquals(listOf("Telegram"), AppRows.filter(rows, " tele", false).map { it.label })
         assertEquals(listOf("Telegram"), AppRows.filter(rows, "org.telegram", false).map { it.label })
         assertEquals(listOf("WhatsApp"), AppRows.filter(rows, "", true).map { it.label })
+    }
+
+    @Test fun systemAppsHiddenUnlessShowSystemChecked() {
+        val rows = listOf(
+            row(AppRule("com.whatsapp"), "WhatsApp", isSystemApp = false),
+            row(AppRule("com.android.systemui", mode = Mode.OFF.name), "System UI", isSystemApp = true),
+        )
+        assertEquals(listOf("WhatsApp"), AppRows.filter(rows, "", false, showSystemApps = false).map { it.label })
+        assertEquals(
+            listOf("System UI", "WhatsApp"),
+            AppRows.filter(rows, "", false, showSystemApps = true).map { it.label },
+        )
     }
 }

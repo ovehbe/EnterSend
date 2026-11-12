@@ -29,6 +29,7 @@ class MainActivity : Activity() {
     private lateinit var adapter: AppListAdapter
     private lateinit var search: EditText
     private lateinit var needsOnly: CheckBox
+    private lateinit var showSystem: CheckBox
     private lateinit var empty: TextView
     private var rows: List<AppRow>? = null
 
@@ -48,6 +49,7 @@ class MainActivity : Activity() {
         handleTeachIntent(intent)
         search = findViewById(R.id.search)
         needsOnly = findViewById(R.id.needs_teaching)
+        showSystem = findViewById(R.id.show_system_apps)
         empty = findViewById(R.id.empty)
         adapter = AppListAdapter(this)
         findViewById<ListView>(R.id.apps).apply {
@@ -61,6 +63,7 @@ class MainActivity : Activity() {
             override fun afterTextChanged(s: Editable?) = applyFilter()
         })
         needsOnly.setOnCheckedChangeListener { _, _ -> applyFilter() }
+        showSystem.setOnCheckedChangeListener { _, _ -> applyFilter() }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -97,7 +100,13 @@ class MainActivity : Activity() {
     private fun applyFilter() {
         val all = rows
         empty.setText(if (all == null) R.string.loading_apps else R.string.no_apps_match)
-        adapter.submit(if (all == null) emptyList() else AppRows.filter(all, search.text, needsOnly.isChecked))
+        adapter.submit(
+            if (all == null) {
+                emptyList()
+            } else {
+                AppRows.filter(all, search.text, needsOnly.isChecked, showSystem.isChecked)
+            },
+        )
     }
 
     private fun showActions(row: AppRow) {
