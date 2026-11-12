@@ -24,7 +24,30 @@ Unit tests run on the JVM with Robolectric (no device needed). The APK is writte
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Then open **Settings → Accessibility → EnterSend** and turn it on.
+Open EnterSend. The first-run setup has three steps, each with a check mark:
+
+1. **Turn on EnterSend**: the button opens EnterSend's page in Accessibility settings (or the Accessibility
+   list on builds without that page). Turn it on and allow it. On Android 13+ the app also asks once for
+   notification permission, used only for the "EnterSend is off" notice.
+2. **Press Enter and Shift+Enter** in the focusable box.
+3. **Try it**: type in the test box and press Enter (it is sent) and Shift+Enter (new line).
+
+Everything is reachable with the physical keyboard: arrow keys or Tab move focus (shown by an orange ring),
+Enter presses the focused control.
+
+## Settings
+
+The main screen lists launchable apps (apps EnterSend has data for come first) with icon, mode and a
+health dot (grey: no sends yet, green: at least 80 % confirmed, yellow: at least 50 %, red: worse).
+Search by name or package; "Only apps that need teaching" shows apps where Enter found no send button,
+that fail often, or that were updated since they were taught ("Needs re-check after update").
+Select an app for: Teach / Re-teach, mode Auto (auto-detect only), Learned (taught rule, then auto-detect,
+then tap spot), Pass-through (Enter goes to the app), Off, and Reset (forget the app and its crop).
+Browsers, notes and email apps are listed as "Never" and cannot be enabled.
+
+If the service is off or was killed, a red banner appears at the top of the app and a persistent notification
+offers a one-tap fix. The notification is posted when the service is unbound, when the app is opened, and by a
+15-minute periodic job.
 
 ## What Enter does
 
@@ -82,9 +105,46 @@ destructive fallback is never enabled. Button crops are PNGs in app-private `fil
 is loaded into memory when the app comes to the foreground; counters are written on a background thread.
 Rules and crops of uninstalled apps are deleted when the app process starts.
 
+## Project layout
+
+```
+app/src/main/java/com/ovehbe/entersend/
+  core/      pure logic: KeyGate (dedupe), ChatFieldGuard, SendFinder, CropMatch, AppLists, TextEdit, Model
+  service/   EnterSendService (entry point), EnterHandler (Enter decisions), TeachFlow (cards),
+             RuleStore (in-memory rules, background writes), Device/A11yDevice and Overlay/CardOverlay seams
+  data/      Room: AppRule entity, RuleDao, AppDb (migrations), CropFiles
+  ui/        MainActivity (settings), SetupActivity (first run), AppRows, AppListAdapter
+  ServiceWatch.kt   service-off notification, periodic check job
+app/schemas/ exported Room schemas (v1)
+app/src/test/ Robolectric behavior tests
+```
+
+Tests drive key events through `EnterSendService.onKeyEvent` (the real accessibility input path), with a fake
+`Device` (screen) and `Overlay` (cards) and an in-memory Room database.
+
+## Permissions
+
+The only permission the user grants is Accessibility. The manifest also declares `VIBRATE` (install-time,
+no prompt) for the buzz after a send and `POST_NOTIFICATIONS` for the service-off notification
+(Android 13+ asks once; everything else works if it is denied). There is no `INTERNET` permission;
+`ManifestTest` fails if any other permission appears.
+
 ## Known limits
 
 - When a saved tap spot fails the live screenshot check after Enter was already taken, Enter is re-delivered
   with the accessibility IME-Enter action. Standard Android text fields treat it like Enter; custom editors may not.
 - Screenshots need Android 11+; on Android 10 the tap-spot fallback is skipped.
 - Shift+Enter rewrites the field text through accessibility, so rich-text spans (e.g. @mentions) may be lost.
+- Alt+Y / Alt+N must be held as chords. While the ask or confirm card is up, the Alt symbol on the Y and N keys
+  can't be typed (the card takes it); once the card is gone they type normally.
+- Teaching needs the app to report the tap as an accessibility click (`TYPE_VIEW_CLICKED`). Apps that don't
+  (some Compose or game-engine UIs) can't be taught; Enter then passes through.
+- The crop is taken from the last screenshot before the tap (taken 0.4 s after the last text change). If the
+  user taps send faster than that after typing the first character, the crop may show the mic button; the
+  confirm card shows the crop so the user can answer no and retry.
+- Cleanup of uninstalled apps relies on package visibility of launchable apps (`<queries>`). A rule for an app
+  without a launcher entry is treated as uninstalled and removed.
+- Chat detection uses lists of known messengers, browsers, notes and email apps (`core/AppLists.kt`) plus
+  view-id/hint words in English and Turkish. Unknown apps need a message-like field or teaching.
+- The periodic service check is not persisted across reboots; it is re-scheduled whenever the app process starts
+  (which happens at boot when the service is enabled).

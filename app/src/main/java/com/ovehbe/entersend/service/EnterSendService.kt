@@ -6,7 +6,9 @@ import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
+import android.content.Intent
 import com.ovehbe.entersend.EnterSendApp
+import com.ovehbe.entersend.ServiceWatch
 import com.ovehbe.entersend.core.KeyGate
 import com.ovehbe.entersend.data.CropFiles
 import java.time.LocalDate
@@ -27,6 +29,23 @@ class EnterSendService : AccessibilityService() {
             RuleStore(app.db.rules(), app.io, { main.post(it) }, CropFiles(filesDir)),
             CardOverlay(this),
         )
+        instance = this
+        ServiceWatch.updateNotice(this, running = true)
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        stopped()
+        return super.onUnbind(intent)
+    }
+
+    override fun onDestroy() {
+        stopped()
+        super.onDestroy()
+    }
+
+    private fun stopped() {
+        if (instance === this) instance = null
+        ServiceWatch.updateNotice(this, running = false)
     }
 
     /** Wires the service to a device, store and overlay; tests call this with fakes. */
@@ -65,6 +84,12 @@ class EnterSendService : AccessibilityService() {
     }
 
     override fun onInterrupt() = Unit
+
+    companion object {
+        /** The connected service, or null when it is off or was killed. Main thread only. */
+        var instance: EnterSendService? = null
+            private set
+    }
 
     private fun versionOf(pkg: String): Long? = try {
         packageManager.getPackageInfo(pkg, 0).longVersionCode

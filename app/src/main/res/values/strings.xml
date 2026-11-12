@@ -17,4 +17,56 @@
     <string name="card_confirm_title_label">Is \"%1$s\" the send button?</string>
     <string name="card_confirm_keys">Alt+Y yes · Alt+N no, try again · Esc cancel</string>
     <string name="card_crop_desc">The button you tapped</string>
+
+    <!-- Settings -->
+    <string name="banner_off">EnterSend is off. Enter won\'t send messages.</string>
+    <string name="turn_on">Turn on</string>
+    <string name="search_apps">Search apps</string>
+    <string name="open_setup">Setup &amp; test</string>
+    <string name="filter_needs_teaching">Only apps that need teaching</string>
+    <string name="loading_apps">Loading apps…</string>
+    <string name="no_apps_match">No apps match.</string>
+    <string name="blocked_app">EnterSend never acts in browsers, notes or email apps, so Enter always works as usual here.</string>
+    <string name="current_choice">%1$s ✓</string>
+    <string name="action_teach">Teach</string>
+    <string name="action_reteach">Re-teach</string>
+    <string name="action_reset">Reset (forget this app)</string>
+    <string name="mode_auto">Auto</string>
+    <string name="mode_learned">Learned</string>
+    <string name="mode_pass_through">Pass-through</string>
+    <string name="mode_off">Off</string>
+    <string name="mode_never">Never (not a chat app)</string>
+    <string name="needs_recheck">Needs re-check after update</string>
+    <string name="needs_teaching">Needs teaching</string>
+    <string name="health_none">No sends yet</string>
+    <string name="health_good">Working: %1$d sent, %2$d failed</string>
+    <string name="health_mixed">Sometimes fails: %1$d sent, %2$d failed</string>
+    <string name="health_bad">Often fails: %1$d sent, %2$d failed</string>
+    <string name="turn_on_first">Turn on EnterSend in Accessibility settings first.</string>
+    <string name="cannot_open_app">This app can\'t be opened from here.</string>
+
+    <!-- Service state notification -->
+    <string name="channel_service">EnterSend status</string>
+    <string name="service_off_title">EnterSend is off</string>
+    <string name="service_off_text">Enter won\'t send messages. Tap to turn it back on.</string>
+
+    <!-- First-run setup -->
+    <string name="setup_title">Set up EnterSend</string>
+    <string name="setup_intro">Three quick steps. You can do all of them with the keyboard: use the arrow keys or Tab to move, Enter to press.</string>
+    <string name="step1_title">Turn on EnterSend</string>
+    <string name="step1_body">EnterSend needs Accessibility access to see the text field and press the send button. It has no internet access.</string>
+    <string name="step1_button">Open Accessibility settings</string>
+    <string name="step2_title">Press Enter and Shift+Enter</string>
+    <string name="step2_body">Move to the box below and press Enter, then Shift+Enter.</string>
+    <string name="step2_status">Enter: %1$s     Shift+Enter: %2$s</string>
+    <string name="step3_title">Try it</string>
+    <string name="step3_body">Type a message and press Enter: it should be sent. Press Shift+Enter to start a new line.</string>
+    <string name="step3_status">Enter sends: %1$s     Shift+Enter adds a line: %2$s</string>
+    <string name="check_yes">✓</string>
+    <string name="check_no">–</string>
+    <string name="check_done">✓</string>
+    <string name="check_pending">○</string>
+    <string name="test_hint">Type a test message</string>
+    <string name="send">Send</string>
+    <string name="done">Done</string>
 </resources>

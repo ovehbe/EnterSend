@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="focus">#FFFF9800</color>
+    <color name="banner_off">#FFC62828</color>
+    <color name="health_none">#FF9E9E9E</color>
+    <color name="health_good">#FF2E7D32</color>
+    <color name="health_mixed">#FFF9A825</color>
+    <color name="health_bad">#FFC62828</color>
+</resources>

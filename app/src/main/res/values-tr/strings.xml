@@ -17,4 +17,56 @@
     <string name="card_confirm_title_label">Gönder düğmesi \"%1$s\" mi?</string>
     <string name="card_confirm_keys">Alt+Y evet · Alt+N hayır, tekrar dene · Esc iptal</string>
     <string name="card_crop_desc">Dokunduğunuz düğme</string>
+
+    <!-- Ayarlar -->
+    <string name="banner_off">EnterSend kapalı. Enter mesaj göndermeyecek.</string>
+    <string name="turn_on">Aç</string>
+    <string name="search_apps">Uygulama ara</string>
+    <string name="open_setup">Kurulum ve test</string>
+    <string name="filter_needs_teaching">Yalnızca öğretilmesi gereken uygulamalar</string>
+    <string name="loading_apps">Uygulamalar yükleniyor…</string>
+    <string name="no_apps_match">Eşleşen uygulama yok.</string>
+    <string name="blocked_app">EnterSend tarayıcılarda, not ve e-posta uygulamalarında hiçbir şey yapmaz; burada Enter her zamanki gibi çalışır.</string>
+    <string name="current_choice">%1$s ✓</string>
+    <string name="action_teach">Öğret</string>
+    <string name="action_reteach">Yeniden öğret</string>
+    <string name="action_reset">Sıfırla (bu uygulamayı unut)</string>
+    <string name="mode_auto">Otomatik</string>
+    <string name="mode_learned">Öğrenilmiş</string>
+    <string name="mode_pass_through">Doğrudan geçir</string>
+    <string name="mode_off">Kapalı</string>
+    <string name="mode_never">Asla (sohbet uygulaması değil)</string>
+    <string name="needs_recheck">Güncellemeden sonra yeniden kontrol gerekli</string>
+    <string name="needs_teaching">Öğretilmesi gerekiyor</string>
+    <string name="health_none">Henüz gönderim yok</string>
+    <string name="health_good">Çalışıyor: %1$d gönderildi, %2$d başarısız</string>
+    <string name="health_mixed">Bazen başarısız: %1$d gönderildi, %2$d başarısız</string>
+    <string name="health_bad">Sık başarısız: %1$d gönderildi, %2$d başarısız</string>
+    <string name="turn_on_first">Önce Erişilebilirlik ayarlarından EnterSend\'i açın.</string>
+    <string name="cannot_open_app">Bu uygulama buradan açılamıyor.</string>
+
+    <!-- Hizmet durumu bildirimi -->
+    <string name="channel_service">EnterSend durumu</string>
+    <string name="service_off_title">EnterSend kapalı</string>
+    <string name="service_off_text">Enter mesaj göndermeyecek. Yeniden açmak için dokunun.</string>
+
+    <!-- İlk kurulum -->
+    <string name="setup_title">EnterSend\'i kurun</string>
+    <string name="setup_intro">Üç kısa adım. Hepsini klavyeyle yapabilirsiniz: ok tuşları veya Tab ile ilerleyin, Enter ile basın.</string>
+    <string name="step1_title">EnterSend\'i açın</string>
+    <string name="step1_body">EnterSend, metin alanını görmek ve gönder düğmesine basmak için Erişilebilirlik iznine ihtiyaç duyar. İnternet erişimi yoktur.</string>
+    <string name="step1_button">Erişilebilirlik ayarlarını aç</string>
+    <string name="step2_title">Enter ve Shift+Enter\'a basın</string>
+    <string name="step2_body">Aşağıdaki kutuya gidin ve önce Enter\'a, sonra Shift+Enter\'a basın.</string>
+    <string name="step2_status">Enter: %1$s     Shift+Enter: %2$s</string>
+    <string name="step3_title">Deneyin</string>
+    <string name="step3_body">Bir mesaj yazıp Enter\'a basın: gönderilmeli. Yeni satır için Shift+Enter\'a basın.</string>
+    <string name="step3_status">Enter gönderir: %1$s     Shift+Enter satır ekler: %2$s</string>
+    <string name="check_yes">✓</string>
+    <string name="check_no">–</string>
+    <string name="check_done">✓</string>
+    <string name="check_pending">○</string>
+    <string name="test_hint">Bir deneme mesajı yazın</string>
+    <string name="send">Gönder</string>
+    <string name="done">Bitti</string>
 </resources>

@@ -27,6 +27,7 @@ class ManifestTest {
         /** Install-time permissions only; accessibility is granted by the user in system settings. */
         val ALLOWED = setOf(
             android.Manifest.permission.VIBRATE,
+            android.Manifest.permission.POST_NOTIFICATIONS,
         )
     }
 }

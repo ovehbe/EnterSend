@@ -17,6 +17,7 @@ class EnterSendApp : Application() {
     override fun onCreate() {
         super.onCreate()
         io.execute { removeUninstalled() }
+        ServiceWatch.schedule(this)
     }
 
     /** Deletes rules and crops of apps that are no longer installed, plus orphaned crop files. */

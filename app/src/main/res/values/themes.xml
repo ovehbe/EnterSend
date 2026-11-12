@@ -1,4 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.EnterSend.Overlay" parent="android:Theme.DeviceDefault.DayNight" />
+
+    <style name="Theme.EnterSend" parent="android:Theme.DeviceDefault.DayNight">
+        <item name="android:buttonStyle">@style/Widget.EnterSend.Button</item>
+        <item name="android:checkboxStyle">@style/Widget.EnterSend.CheckBox</item>
+        <item name="android:editTextStyle">@style/Widget.EnterSend.EditText</item>
+    </style>
+
+    <style name="Widget.EnterSend.Button" parent="android:Widget.DeviceDefault.Button">
+        <item name="android:foreground">@drawable/focus_ring</item>
+    </style>
+
+    <style name="Widget.EnterSend.CheckBox" parent="android:Widget.DeviceDefault.CompoundButton.CheckBox">
+        <item name="android:foreground">@drawable/focus_ring</item>
+    </style>
+
+    <style name="Widget.EnterSend.EditText" parent="android:Widget.DeviceDefault.EditText">
+        <item name="android:foreground">@drawable/focus_ring</item>
+    </style>
+
+    <style name="SetupStepHeader">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">20dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="SetupCheck">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="SetupStepTitle">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textAppearance">?android:attr/textAppearanceMedium</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="SetupStepBody">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+    </style>
 </resources>
