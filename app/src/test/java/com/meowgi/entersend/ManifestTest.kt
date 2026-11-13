@@ -72,7 +72,6 @@ class ManifestTest {
             android.Manifest.permission.VIBRATE,
             android.Manifest.permission.POST_NOTIFICATIONS,
             android.Manifest.permission.PACKAGE_USAGE_STATS,
-            android.Manifest.permission.QUERY_ALL_PACKAGES,
         )
     }
 }

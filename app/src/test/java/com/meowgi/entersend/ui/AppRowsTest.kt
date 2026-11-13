@@ -61,24 +61,6 @@ class AppRowsTest {
         assertEquals(listOf("WhatsApp"), AppRows.filter(rows, "", true).map { it.label })
     }
 
-    @Test fun searchMatchesWordStartsAndPackageSegmentsCaseInsensitive() {
-        val rows = listOf(
-            row(AppRule("com.facebook.orca"), "Facebook Messenger"),
-            row(AppRule("com.whatsapp"), "WhatsApp"),
-            row(AppRule("org.telegram.messenger"), "Telegram"),
-        )
-        assertTrue(AppRows.matchesQuery("Facebook Messenger", "com.facebook.orca", "mes"))
-        assertTrue(AppRows.matchesQuery("Facebook Messenger", "com.facebook.orca", "MES"))
-        assertTrue(AppRows.matchesQuery("WhatsApp", "com.whatsapp", "what"))
-        assertTrue(AppRows.matchesQuery("Telegram", "org.telegram.messenger", "tele"))
-        assertTrue(AppRows.matchesQuery("Telegram", "org.telegram.messenger", "messenger"))
-        assertFalse(AppRows.matchesQuery("WhatsApp", "com.whatsapp", "zzzz"))
-        // "mes" is a word-start of Messenger; also a substring of package …messenger — both OK.
-        assertTrue(AppRows.filter(rows, "mes", false).any { it.label == "Facebook Messenger" })
-        assertEquals(listOf("Facebook Messenger"), AppRows.filter(rows, "orca", false).map { it.label })
-        assertEquals(listOf("Telegram"), AppRows.filter(rows, "telegram", false).map { it.label })
-    }
-
     @Test fun systemAppsHiddenUnlessShowSystemChecked() {
         val rows = listOf(
             row(AppRule("com.whatsapp"), "WhatsApp", isSystemApp = false),

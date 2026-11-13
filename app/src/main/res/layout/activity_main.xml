@@ -200,113 +200,122 @@
             </LinearLayout>
         </ScrollView>
 
-        <!-- 1: Apps -->
-        <LinearLayout
+        <!-- 1: Apps — content + blocking load overlay -->
+        <FrameLayout
             android:id="@+id/page_apps"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:paddingTop="4dp">
+            android:layout_height="match_parent">
 
-            <TextView
-                android:id="@+id/apps_diag"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingHorizontal="12dp"
-                android:paddingTop="2dp"
-                android:paddingBottom="2dp"
-                android:textAppearance="?attr/textAppearanceBodySmall"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                android:textIsSelectable="true"
-                android:textSize="11sp" />
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:paddingTop="4dp">
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="12dp"
-                android:hint="@string/search_apps"
-                app:boxBackgroundMode="outline"
-                app:endIconMode="clear_text">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/search"
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:foreground="@drawable/focus_ring"
-                    android:imeOptions="actionSearch"
-                    android:importantForAutofill="no"
-                    android:inputType="text"
-                    android:nextFocusDown="@+id/needs_teaching"
-                    android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:layout_marginHorizontal="12dp"
+                    android:hint="@string/search_apps"
+                    app:boxBackgroundMode="outline"
+                    app:endIconMode="clear_text">
 
-            <HorizontalScrollView
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/search"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:foreground="@drawable/focus_ring"
+                        android:imeOptions="actionSearch"
+                        android:importantForAutofill="no"
+                        android:inputType="text"
+                        android:nextFocusDown="@+id/needs_teaching"
+                        android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="8dp"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingVertical="4dp">
+
+                        <com.google.android.material.checkbox.MaterialCheckBox
+                            android:id="@+id/needs_teaching"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:foreground="@drawable/focus_ring"
+                            android:nextFocusDown="@+id/show_system_apps"
+                            android:text="@string/filter_needs_teaching" />
+
+                        <com.google.android.material.checkbox.MaterialCheckBox
+                            android:id="@+id/show_system_apps"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:foreground="@drawable/focus_ring"
+                            android:nextFocusDown="@+id/refresh_apps"
+                            android:text="@string/filter_show_system_apps" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/refresh_apps"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:foreground="@drawable/focus_ring"
+                            android:nextFocusDown="@+id/apps"
+                            android:text="@string/refresh_apps" />
+                    </LinearLayout>
+                </HorizontalScrollView>
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
+
+                    <ListView
+                        android:id="@+id/apps"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:clipToPadding="false"
+                        android:divider="@android:color/transparent"
+                        android:dividerHeight="0dp"
+                        android:drawSelectorOnTop="true"
+                        android:listSelector="@drawable/focus_ring"
+                        android:paddingBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/empty"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:padding="24dp"
+                        android:text="@string/loading_apps"
+                        android:textAppearance="?attr/textAppearanceBodyLarge"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+                </FrameLayout>
+            </LinearLayout>
+
+            <!-- Blocks search / filters / list / Refresh until AppRows.load finishes. -->
+            <FrameLayout
+                android:id="@+id/apps_loading"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingHorizontal="8dp"
-                android:scrollbars="none">
+                android:layout_height="match_parent"
+                android:background="?attr/colorSurface"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone">
 
-                <LinearLayout
+                <ProgressBar
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingVertical="4dp">
-
-                    <com.google.android.material.checkbox.MaterialCheckBox
-                        android:id="@+id/needs_teaching"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:foreground="@drawable/focus_ring"
-                        android:nextFocusDown="@+id/show_system_apps"
-                        android:text="@string/filter_needs_teaching" />
-
-                    <com.google.android.material.checkbox.MaterialCheckBox
-                        android:id="@+id/show_system_apps"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:foreground="@drawable/focus_ring"
-                        android:nextFocusDown="@+id/refresh_apps"
-                        android:text="@string/filter_show_system_apps" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/refresh_apps"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:foreground="@drawable/focus_ring"
-                        android:nextFocusDown="@+id/apps"
-                        android:text="@string/refresh_apps" />
-                </LinearLayout>
-            </HorizontalScrollView>
-
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1">
-
-                <ListView
-                    android:id="@+id/apps"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clipToPadding="false"
-                    android:divider="@android:color/transparent"
-                    android:dividerHeight="0dp"
-                    android:drawSelectorOnTop="true"
-                    android:listSelector="@drawable/focus_ring"
-                    android:paddingBottom="8dp" />
-
-                <TextView
-                    android:id="@+id/empty"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:padding="24dp"
-                    android:text="@string/loading_apps"
-                    android:textAppearance="?attr/textAppearanceBodyLarge"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
+                    android:layout_gravity="center" />
             </FrameLayout>
-        </LinearLayout>
+        </FrameLayout>
 
         <!-- 2: Profiles -->
         <LinearLayout

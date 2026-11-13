@@ -21,9 +21,6 @@ import com.meowgi.entersend.data.Mode
  * All FLAG_SYSTEM / FLAG_UPDATED_SYSTEM_APP packages default Off and are never auto-prompted
  * (including launchable ones like stock Messages). The user can still enable them in Settings.
  * Only launcher-visible non-system apps are prompted once when opened without a config.
- *
- * Home / IME / Settings are resolved fresh on every call — this instance is held for the life
- * of the accessibility service and the prompt path, and the user can switch launcher or IME.
  */
 class SystemAppPolicy(private val context: Context) {
     private val pm: PackageManager get() = context.packageManager
@@ -54,17 +51,6 @@ class SystemAppPolicy(private val context: Context) {
     fun isSystemApp(pkg: String): Boolean {
         if (isAlwaysOff(pkg) || isHiddenSystemApp(pkg)) return true
         return hasSystemFlag(pkg)
-    }
-
-    /**
-     * Apps-list visibility (0.3.6+). On some OEM ROMs (e.g. Unihertz) launchable chat apps
-     * live under /system or /product and carry FLAG_SYSTEM — hiding every FLAG_SYSTEM package
-     * yields an empty Apps page. Only hide always-off packages and non-launchable system junk;
-     * launchable FLAG_SYSTEM apps stay visible (prompt/mode defaults still use [defaultsOff]).
-     */
-    fun hideFromAppsList(pkg: String): Boolean {
-        if (isAlwaysOff(pkg)) return true
-        return hasSystemFlag(pkg) && !hasLauncherIcon(pkg)
     }
 
     /** Defaults Off with no prompt — always-off list or any system-flagged package. */

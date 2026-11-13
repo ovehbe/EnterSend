@@ -40,7 +40,7 @@ Open EnterSend. The first-run setup has three steps, each with a check mark:
 Everything is reachable with the physical keyboard: arrow keys or Tab move focus (subtle Material tint;
 system orange focus highlight is disabled), Enter presses the focused control.
 
-## App UI (0.3.7)
+## App UI (0.3.8)
 
 Material 3 shell with light/dark (and dynamic color on Android 12+), built for the Q25’s short
 square screen and hardware keyboard (D-pad / Tab friendly focus tint).
@@ -48,7 +48,8 @@ square screen and hardware keyboard (D-pad / Tab friendly focus tint).
 Bottom navigation:
 
 1. **Home** — service status, optional **Usage Access** card, active profile, shortcuts to setup and apps.
-2. **Apps** — searchable list with icons, mode, health; filters for needs-teaching and system apps.
+2. **Apps** — same PackageManager listing as 0.3.3 (MAIN+LAUNCHER, system-app filter / Show system apps),
+   with a blocking loading spinner while the list loads on a background thread, then one main-thread swap.
 3. **Profiles** — save / switch / rename / delete full config snapshots (different keyboard heights).
 4. **Settings** — new-app prompts toggle, Usage Access backup, export/import JSON, open setup, **Diagnostics**, version.
 

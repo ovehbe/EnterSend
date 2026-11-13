@@ -63,15 +63,6 @@ class SystemAppPolicyTest {
         assertEquals(Mode.OFF, policy.resolveMode(AppRule("com.google.android.apps.messaging")))
     }
 
-    @Test fun launchableSystemAppStillVisibleOnAppsList() {
-        // 0.3.6 Q25: OEM /product FLAG_SYSTEM launchers must not vanish from Apps.
-        install("com.google.android.apps.messaging", system = true, updated = true, launcher = true)
-        assertTrue(policy.isSystemApp("com.google.android.apps.messaging"))
-        assertFalse(policy.hideFromAppsList("com.google.android.apps.messaging"))
-        install("com.android.providers.downloads", system = true, launcher = false)
-        assertTrue(policy.hideFromAppsList("com.android.providers.downloads"))
-    }
-
     @Test fun existingModeRowWinsOverRuntimeDefault() {
         install("com.android.providers.downloads", system = true, launcher = false)
         val overridden = AppRule("com.android.providers.downloads", mode = Mode.AUTO.name)

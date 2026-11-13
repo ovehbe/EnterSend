@@ -10,20 +10,12 @@
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
-    <!-- Sideload / OEM: broad package visibility so Apps listing matches 0.3.3 on ROMs where
-         the MAIN/LAUNCHER <queries> intent alone is insufficient after an upgrade. -->
-    <uses-permission
-        android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission" />
 
     <!-- Lets EnterSend see launchable apps: the Settings list and cleanup of uninstalled apps. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.MAIN" />
         </intent>
     </queries>
 
