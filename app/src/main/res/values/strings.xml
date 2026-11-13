@@ -115,6 +115,12 @@
     <string name="setting_prompts_blurb">When on, EnterSend asks each time you open an app that has no teach decision yet.</string>
     <string name="setting_usage_fallback">Usage Access backup</string>
     <string name="setting_usage_fallback_blurb">Optional. If accessibility misses an app open, use Usage Access to detect the foreground app. Off by default.</string>
+    <string name="setting_auto_focus">Auto-focus text field</string>
+    <string name="setting_auto_focus_blurb">When on, EnterSend focuses the taught message box when you open a set-up chat app so the hardware keyboard can type immediately. Off by default.</string>
+    <string name="action_auto_focus">Auto-focus…</string>
+    <string name="auto_focus_default">Default (follow Settings)</string>
+    <string name="auto_focus_on">On</string>
+    <string name="auto_focus_off">Off</string>
     <string name="setting_usage_grant">Grant Usage Access</string>
     <string name="usage_access_card_title">Improve app detection: grant Usage Access</string>
     <string name="usage_access_card_body">Optional. Helps EnterSend notice new apps even when the keyboard or an overlay is on top. Turned on automatically once you grant it.</string>

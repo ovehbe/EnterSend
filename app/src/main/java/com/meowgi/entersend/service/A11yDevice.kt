@@ -183,6 +183,81 @@ class A11yDevice(private val service: AccessibilityService) : Device {
         return n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
     }
 
+    override fun focusForTyping(field: Field): Boolean {
+        if (focus(field)) return true
+        val n = field.ref as? AccessibilityNodeInfo ?: return false
+        // Some Compose fields need a click before ACTION_FOCUS sticks.
+        return n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    }
+
+    override fun findMessageField(pkg: String, preferredViewId: String?): Field? {
+        val root = service.rootInActiveWindow ?: return null
+        if (root.packageName?.toString() != pkg) {
+            // Active window may be IME; search application windows for [pkg].
+            val fromWindows = try {
+                service.windows?.firstOrNull { w ->
+                    w.root?.packageName?.toString() == pkg
+                }?.root
+            } catch (_: SecurityException) {
+                null
+            }
+            return fromWindows?.let { findEditable(it, pkg, preferredViewId) }
+        }
+        return findEditable(root, pkg, preferredViewId)
+    }
+
+    private fun findEditable(
+        root: AccessibilityNodeInfo,
+        pkg: String,
+        preferredViewId: String?,
+    ): Field? {
+        if (!preferredViewId.isNullOrBlank()) {
+            val matches = root.findAccessibilityNodeInfosByViewId(preferredViewId)
+            for (n in matches) {
+                if (n.isEditable && n.isVisibleToUser) {
+                    return fieldOf(n, pkg)
+                }
+            }
+        }
+        // Walk for a visible editable; prefer nodes that look like message boxes.
+        val count = intArrayOf(0)
+        return walkEditable(root, pkg, preferredViewId, 0, count)
+    }
+
+    private fun walkEditable(
+        n: AccessibilityNodeInfo,
+        pkg: String,
+        preferredViewId: String?,
+        depth: Int,
+        count: IntArray,
+    ): Field? {
+        if (depth > MAX_DEPTH || count[0] >= MAX_NODES) return null
+        count[0]++
+        if (n.isEditable && n.isVisibleToUser && n.packageName?.toString() == pkg) {
+            val f = fieldOf(n, pkg)
+            if (preferredViewId == null || f.viewId == preferredViewId) return f
+        }
+        for (i in 0 until n.childCount) {
+            val child = n.getChild(i) ?: continue
+            walkEditable(child, pkg, preferredViewId, depth + 1, count)?.let { return it }
+        }
+        return null
+    }
+
+    private fun fieldOf(n: AccessibilityNodeInfo, pkg: String): Field = Field(
+        packageName = n.packageName?.toString() ?: pkg,
+        text = textOf(n),
+        selStart = n.textSelectionStart,
+        selEnd = n.textSelectionEnd,
+        inputType = n.inputType,
+        isPassword = n.isPassword,
+        viewId = n.viewIdResourceName,
+        hint = n.hintText?.toString(),
+        bounds = boundsOf(n),
+        ref = n,
+        className = n.className?.toString(),
+    )
+
     override fun fieldImeDiag(field: Field): FieldImeDiag {
         val n = field.ref as? AccessibilityNodeInfo
         val multi = field.inputType and android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0

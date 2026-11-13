@@ -35,6 +35,15 @@ interface Device {
     fun vibrate()
     /** Restore input focus to the compose box after a successful send. */
     fun focus(field: Field): Boolean = false
+    /**
+     * Focus [field] for typing (auto-focus). Default: [focus]. Production may also try CLICK.
+     */
+    fun focusForTyping(field: Field): Boolean = focus(field)
+    /**
+     * Find the message compose field in [pkg], preferring [preferredViewId] when taught.
+     * Null when nothing suitable is on screen.
+     */
+    fun findMessageField(pkg: String, preferredViewId: String?): Field? = null
     /** Short on-screen notice (debug toast or send-failed). No-op in headless tests unless recorded. */
     fun notice(message: String) {}
     /** Extra IME / action info for EnterDiagLog; default uses [Field] only. */

@@ -113,6 +113,12 @@
     <string name="setting_prompts_blurb">Açıkken EnterSend, henüz karar verilmemiş bir uygulamayı her açışınızda sorar.</string>
     <string name="setting_usage_fallback">Kullanım erişimi yedek</string>
     <string name="setting_usage_fallback_blurb">İsteğe bağlı. Erişilebilirlik bir uygulama açılışını kaçırırsa önalanı Kullanım Erişimi ile bulur. Varsayılan kapalı.</string>
+    <string name="setting_auto_focus">Metin alanına otomatik odak</string>
+    <string name="setting_auto_focus_blurb">Açıkken EnterSend, ayarlanmış bir sohbet uygulamasını açtığınızda öğretilmiş mesaj kutusuna odaklanır; donanım klavyesi hemen yazabilir. Varsayılan kapalı.</string>
+    <string name="action_auto_focus">Otomatik odak…</string>
+    <string name="auto_focus_default">Varsayılan (Ayarları izle)</string>
+    <string name="auto_focus_on">Açık</string>
+    <string name="auto_focus_off">Kapalı</string>
     <string name="setting_usage_grant">Kullanım erişimini ver</string>
     <string name="usage_access_card_title">Uygulama algılamayı iyileştir: Kullanım Erişimi ver</string>
     <string name="usage_access_card_body">İsteğe bağlı. Klavye veya bir katman üstteyken bile EnterSend\'in yeni uygulamaları görmesine yardım eder. İzin verince otomatik açılır.</string>

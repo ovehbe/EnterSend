@@ -110,8 +110,8 @@ class SettingsScreenTest {
         val a = open()
         val list = a.findViewById<ListView>(R.id.apps)
         list.performItemClick(list, 0, 0)
-        // Re-teach, Auto, Learned, Pass-through, Off, Reset
-        shadowOf(ShadowAlertDialog.getLatestAlertDialog()).clickOnItem(5)
+        // Re-teach, Auto, Learned, Pass-through, Off, Auto-focus, Reset
+        shadowOf(ShadowAlertDialog.getLatestAlertDialog()).clickOnItem(6)
         settle()
         assertNull(io { dao.get("com.whatsapp") })
     }

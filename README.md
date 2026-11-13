@@ -40,6 +40,13 @@ Open EnterSend. The first-run setup has three steps, each with a check mark:
 Everything is reachable with the physical keyboard: arrow keys or Tab move focus (subtle Material tint;
 system orange focus highlight is disabled), Enter presses the focused control.
 
+## Auto-focus (0.3.12)
+
+Optional. Settings → **Auto-focus text field** (off by default). When on, opening a taught /
+learned chat app focuses its message box once per window appearance so the hardware keyboard
+can type immediately. Per-app Default / On / Off lives on the app action sheet. Never re-steals
+focus after you tap elsewhere; skips system apps and apps that are not set up.
+
 ## App UI (0.3.8)
 
 Material 3 shell with light/dark (and dynamic color on Android 12+), built for the Q25’s short

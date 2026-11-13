@@ -18,6 +18,7 @@ import com.meowgi.entersend.EnterSendApp
 import com.meowgi.entersend.ServiceWatch
 import com.meowgi.entersend.core.KeyGate
 import com.meowgi.entersend.core.SystemAppPolicy
+import com.meowgi.entersend.data.AutoFocusPrefs
 import com.meowgi.entersend.data.CropFiles
 import com.meowgi.entersend.data.EnterDiagLog
 import com.meowgi.entersend.data.PromptDecisionLog
@@ -34,6 +35,7 @@ class EnterSendService : AccessibilityService() {
     private var chooser: PromptChooser? = null
     private var usage: UsageForeground? = null
     private var screenReceiver: BroadcastReceiver? = null
+    private var autoFocus: AutoFocusController? = null
     private val usagePoll = object : Runnable {
         override fun run() {
             crossCheckUsage("usage-poll")
@@ -169,6 +171,14 @@ class EnterSendService : AccessibilityService() {
         this.teach = teach
         val log = PromptDecisionLog.get(this)
         val enterDiag = EnterDiagLog.get(this)
+        autoFocus = AutoFocusController(
+            device = device,
+            store = store,
+            policy = policy,
+            enabledFor = { pkg -> AutoFocusPrefs.enabledFor(this, pkg) },
+            diag = enterDiag,
+            resolveMode = policy::resolveMode,
+        )
         enter = EnterHandler(
             device, store, main,
             offerTeach = { rule ->
@@ -194,6 +204,13 @@ class EnterSendService : AccessibilityService() {
             diag = enterDiag,
         )
     }
+
+    /** Test hook: run auto-focus for [pkg] with a synthetic appearance key. */
+    internal fun autoFocusForTests(pkg: String, appearanceKey: String) {
+        autoFocus?.onAppearance(pkg, appearanceKey)
+    }
+
+    internal fun autoFocusControllerOrNull(): AutoFocusController? = autoFocus
 
     fun showPromptChooser(pkg: String) {
         chooser?.show(pkg)
@@ -280,6 +297,16 @@ class EnterSendService : AccessibilityService() {
             return
         }
         applyForeground(resolved.packageName, "a11y/" + resolved.source)
+        // Auto-focus once per window/screen appearance (package + window id), not only on package change.
+        val appearanceKey = resolved.packageName + "|" + event.windowId + "|" + event.eventType
+        scheduleAutoFocus(resolved.packageName, appearanceKey)
+    }
+
+    private fun scheduleAutoFocus(pkg: String, appearanceKey: String) {
+        // Short delay so the chat layout can finish inflating after WINDOW_STATE_CHANGED.
+        main.postDelayed({
+            autoFocus?.onAppearance(pkg, appearanceKey)
+        }, AUTO_FOCUS_DELAY_MS)
     }
 
     private fun crossCheckUsage(source: String) {
@@ -301,6 +328,11 @@ class EnterSendService : AccessibilityService() {
         // Prompt path only — never feeds EnterHandler's package selection.
         store?.onForeground(pkg)
         store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule, source = source) }
+        // Usage / screen-on path has no window id — treat package entry as one appearance.
+        // A11y WINDOW_* events schedule separately with windowId (see onForegroundEvent).
+        if (source.startsWith("usage") || source.startsWith("screen-on")) {
+            scheduleAutoFocus(pkg, "$pkg|fg|$source")
+        }
     }
 
     private fun resolveForeground(eventPkg: String?): ForegroundPackage.Resolved? {
@@ -399,6 +431,8 @@ class EnterSendService : AccessibilityService() {
         var instance: EnterSendService? = null
             private set
         private const val USAGE_POLL_MS = 2_500L
+        /** Delay so compose / chat UI can finish after WINDOW_STATE_CHANGED. */
+        private const val AUTO_FOCUS_DELAY_MS = 200L
 
         /** Unit tests only. */
         internal fun clearInstanceForTests() {

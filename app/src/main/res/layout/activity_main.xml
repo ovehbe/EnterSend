@@ -449,6 +449,22 @@
                     android:textAppearance="?attr/textAppearanceBodySmall"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/auto_focus_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:defaultFocusHighlightEnabled="false"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/setting_auto_focus" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:text="@string/setting_auto_focus_blurb"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/usage_grant"
                     style="@style/Widget.Material3.Button.TonalButton"

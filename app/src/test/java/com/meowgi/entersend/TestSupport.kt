@@ -76,6 +76,8 @@ class FakeDevice : Device {
     var imeEnters = 0
     var vibrations = 0
     val notices = mutableListOf<String>()
+    /** Unfocused message-field candidates for [findMessageField] (auto-focus tests). */
+    var messageFields: List<Field> = emptyList()
 
     override fun focusedField() = field
     override fun windowRoot(field: Field) = root
@@ -91,6 +93,28 @@ class FakeDevice : Device {
         focuses += field
         this.field = field
         return true
+    }
+
+    override fun focusForTyping(field: Field): Boolean = focus(field)
+
+    override fun findMessageField(pkg: String, preferredViewId: String?): Field? {
+        val fromList = messageFields.filter { it.packageName == pkg }
+        if (preferredViewId != null) {
+            fromList.firstOrNull { it.viewId == preferredViewId }?.let { return it }
+            val match = root?.flatten()?.firstOrNull {
+                it.editable && it.visible && it.viewId == preferredViewId
+            } ?: return null
+            return Field(
+                pkg, "", 0, 0, CHAT_TYPE, false,
+                match.viewId, null, match.bounds, match.ref, match.className,
+            )
+        }
+        fromList.firstOrNull()?.let { return it }
+        val n = root?.flatten()?.firstOrNull { it.editable && it.visible } ?: return null
+        return Field(
+            pkg, "", 0, 0, CHAT_TYPE, false,
+            n.viewId, "Message", n.bounds, n.ref, n.className,
+        )
     }
 
     override fun setText(field: Field, text: String, cursor: Int): Boolean {
