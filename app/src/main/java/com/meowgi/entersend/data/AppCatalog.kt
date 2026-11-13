@@ -18,6 +18,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * Room-backed Apps catalog: show cached rows instantly, rescan PackageManager only when
  * packages change (broadcast or [android.content.pm.PackageManager.getChangedPackages])
  * or on manual refresh. Icons stay out of the cache and load lazily in the list.
+ *
+ * Empty-cache / failed-scan rule: never stick on an empty list — fall back to a live
+ * PackageManager scan and only advance the change-sequence after a non-empty write.
  */
 class AppCatalog(
     private val context: Context,
@@ -110,8 +113,13 @@ class AppCatalog(
         return rows
     }
 
+    /**
+     * Empty Room cache always needs a PackageManager scan — even if in-memory orphans
+     * from rules made [memory] look warm, or [KEY_SEQ] was advanced after a failed scan.
+     */
     fun needsRescan(): Boolean {
-        if (memory.isEmpty() && dao.count() == 0) return true
+        if (dao.count() == 0) return true
+        if (memory.isEmpty()) return true
         // Prefer package-change sequence (cheap). Only fall back to a launcher-name
         // diff when the sequence is too old / unavailable (e.g. some test shadows).
         if (Build.VERSION.SDK_INT >= 26) {
@@ -137,31 +145,93 @@ class AppCatalog(
     fun fullScan(rules: List<AppRule>): List<AppRow> {
         scanGeneration.incrementAndGet()
         val t0 = SystemClock.elapsedRealtime()
-        val scanned = AppRows.scanPackages(context, policy)
-        dao.replaceAll(scanned)
-        bumpSequence()
-        val rows = AppRows.fromCache(scanned, rules, policy)
-        memory = rows
-        lastLoadMs = SystemClock.elapsedRealtime() - t0
-        lastLoadSource = "scan"
-        Log.d(TAG, "apps_load source=scan ms=$lastLoadMs count=${rows.size}")
-        return rows
+        val scanned = try {
+            AppRows.scanPackages(context, policy)
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "apps_load scan failed", e)
+            emptyList()
+        }
+        if (scanned.isNotEmpty()) {
+            dao.replaceAll(scanned)
+            bumpSequence()
+            val rows = AppRows.fromCache(scanned, rules, policy)
+            memory = rows
+            lastLoadMs = SystemClock.elapsedRealtime() - t0
+            lastLoadSource = "scan"
+            Log.d(TAG, "apps_load source=scan ms=$lastLoadMs count=${rows.size}")
+            return rows
+        }
+        // Empty or failed scan: do not wipe a good cache / advance sequence.
+        return liveFallback(rules, t0)
     }
 
-    fun refresh(rules: List<AppRule>): List<AppRow> = fullScan(rules)
+    fun refresh(rules: List<AppRule>): List<AppRow> {
+        // Manual refresh: drop sticky sequence so needsRescan cannot short-circuit recovery.
+        clearSequence()
+        return fullScan(rules)
+    }
 
     /**
      * Open path: serve in-memory / Room cache when warm and unchanged; otherwise scan.
+     * Empty cache or failed scan always falls back to a live PackageManager scan.
      */
     fun open(rules: List<AppRule>, forceScan: Boolean = false): List<AppRow> {
-        if (!forceScan && memory.isNotEmpty() && !needsRescan()) {
-            return rebindRules(rules, source = "cache")
-        }
-        if (!forceScan) {
-            val cached = loadCached(rules)
-            if (cached.isNotEmpty() && !needsRescan()) {
-                return cached
+        try {
+            if (!forceScan && memory.isNotEmpty() && dao.count() > 0 && !needsRescan()) {
+                return rebindRules(rules, source = "cache")
             }
+            if (!forceScan) {
+                val cached = loadCached(rules)
+                if (cached.isNotEmpty() && dao.count() > 0 && !needsRescan()) {
+                    return cached
+                }
+            }
+            return fullScan(rules)
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "apps_load open failed", e)
+            return liveFallback(rules, SystemClock.elapsedRealtime())
+        }
+    }
+
+    /**
+     * Last-resort live PackageManager scan used when Room is empty or a scan failed.
+     * Never leaves the UI on a stuck empty list when launchable apps exist.
+     */
+    fun liveFallback(rules: List<AppRule>, t0: Long = SystemClock.elapsedRealtime()): List<AppRow> {
+        val scanned = try {
+            AppRows.scanPackages(context, policy)
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "apps_load fallback failed", e)
+            emptyList()
+        }
+        if (scanned.isNotEmpty()) {
+            try {
+                dao.replaceAll(scanned)
+                bumpSequence()
+            } catch (e: RuntimeException) {
+                Log.e(TAG, "apps_load fallback persist failed", e)
+            }
+            val rows = AppRows.fromCache(scanned, rules, policy)
+            memory = rows
+            lastLoadMs = SystemClock.elapsedRealtime() - t0
+            lastLoadSource = "fallback"
+            Log.d(TAG, "apps_load source=fallback ms=$lastLoadMs count=${rows.size}")
+            return rows
+        }
+        // Keep prior memory if we had anything; otherwise stay empty.
+        lastLoadMs = SystemClock.elapsedRealtime() - t0
+        lastLoadSource = "fallback"
+        Log.d(TAG, "apps_load source=fallback ms=$lastLoadMs count=${memory.size}")
+        return memory
+    }
+
+    /** Seed after Application start / upgrade: fill Room when the catalog table is empty. */
+    fun ensureSeeded(rules: List<AppRule>): List<AppRow> {
+        if (dao.count() > 0 && memory.isNotEmpty()) {
+            return memory
+        }
+        if (dao.count() > 0) {
+            return loadCached(rules)
         }
         return fullScan(rules)
     }
@@ -229,6 +299,10 @@ class AppCatalog(
             }
         } catch (_: RuntimeException) {
         }
+    }
+
+    private fun clearSequence() {
+        prefs.edit().putInt(KEY_SEQ, 0).apply()
     }
 
     companion object {

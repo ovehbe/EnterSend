@@ -107,10 +107,14 @@ object AppRows {
 
     fun launchablePackages(context: Context): List<String> {
         val pm = context.packageManager
-        return pm.queryIntentActivities(
-            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
-            0,
-        ).map { it.activityInfo.packageName }
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        var resolved = pm.queryIntentActivities(intent, 0)
+        // Some devices return an empty list with flags=0 right after an upgrade; MATCH_ALL
+        // recovers without requiring QUERY_ALL_PACKAGES.
+        if (resolved.isEmpty()) {
+            resolved = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
+        }
+        return resolved.map { it.activityInfo.packageName }
     }
 
     fun fromCache(
@@ -144,7 +148,8 @@ object AppRows {
             rule = rule,
             versionCode = cached.versionCode,
             mode = policy.resolveMode(rule),
-            isSystemApp = cached.isSystem,
+            // Live policy — never trust a stale cached isSystem flag to hide user apps.
+            isSystemApp = policy.isSystemApp(cached.packageName),
         )
 
     /**

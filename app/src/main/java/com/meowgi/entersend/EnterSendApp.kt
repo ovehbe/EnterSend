@@ -24,10 +24,9 @@ class EnterSendApp : Application() {
         catalog.registerPackageReceiver()
         io.execute {
             removeUninstalled()
-            // Seed Room cache if empty so the first Apps visit is already warm when possible.
-            if (db.apps().count() == 0) {
-                catalog.fullScan(db.rules().all())
-            }
+            // After v2→v3 migration cached_apps is empty — always seed (or re-seed) so Apps
+            // is warm. ensureSeeded also recovers when a prior empty scan left the table blank.
+            catalog.ensureSeeded(db.rules().all())
         }
         ServiceWatch.schedule(this)
     }

@@ -304,16 +304,19 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.profiles_empty).visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
     }
 
-    /** Apps tab: if the list is already loaded, show it instantly (second-visit path). */
+    /**
+     * Apps tab: if the list is already loaded with rows, show it instantly (second-visit path).
+     * An empty list is NOT "loaded" — that is the 0.3.4 upgrade sticky-empty bug; reload.
+     */
     private fun ensureAppsShown() {
         val t0 = SystemClock.elapsedRealtime()
         val current = rows
-        if (current != null) {
+        if (!current.isNullOrEmpty()) {
             val ms = SystemClock.elapsedRealtime() - t0
             Log.d(AppCatalog.TAG, "apps_load source=memory ms=$ms count=${current.size}")
             return
         }
-        reload(forceScan = false)
+        reload(forceScan = current != null && current.isEmpty())
     }
 
     /**
@@ -322,8 +325,9 @@ class MainActivity : AppCompatActivity() {
      */
     private fun reload(forceScan: Boolean = false, toastWhenDone: Boolean = false) {
         // Paint whatever we already have in memory immediately (second visit / tab switch).
+        // Never paint an empty warm snapshot over a null/loading state — that sticks the UI.
         val warm = app.catalog.memory
-        if (warm.isNotEmpty() && rows == null) {
+        if (warm.isNotEmpty() && rows.isNullOrEmpty()) {
             rows = warm
             scheduleFilter(immediate = true)
         }
@@ -335,7 +339,10 @@ class MainActivity : AppCompatActivity() {
                 app.catalog.open(rules)
             }
             runOnUiThread {
-                rows = loaded
+                // Prefer a non-empty result; don't clobber a good list with a failed empty scan.
+                if (loaded.isNotEmpty() || rows.isNullOrEmpty()) {
+                    rows = loaded
+                }
                 scheduleFilter(immediate = true)
                 if (toastWhenDone) {
                     Toast.makeText(this, R.string.apps_refreshed, Toast.LENGTH_SHORT).show()
