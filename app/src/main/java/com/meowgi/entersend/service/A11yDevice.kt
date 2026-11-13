@@ -185,9 +185,32 @@ class A11yDevice(private val service: AccessibilityService) : Device {
 
     override fun focusForTyping(field: Field): Boolean {
         if (focus(field)) return true
+        return clickField(field)
+    }
+
+    override fun clickField(field: Field): Boolean {
         val n = field.ref as? AccessibilityNodeInfo ?: return false
-        // Some Compose fields need a click before ACTION_FOCUS sticks.
         return n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    }
+
+    override fun listEditableFields(pkg: String): List<Field> {
+        val root = rootForPackage(pkg) ?: return emptyList()
+        val out = ArrayList<Field>()
+        val count = intArrayOf(0)
+        collectEditables(root, pkg, 0, count, out)
+        return out
+    }
+
+    override fun windowStateForPackage(pkg: String): WindowState? {
+        // Same display metrics as windowState(field) — package is only for future filtering.
+        val dm = service.resources.displayMetrics
+        return WindowState(
+            orientation = service.resources.configuration.orientation,
+            width = dm.widthPixels,
+            height = dm.heightPixels,
+            keyboardShown = false,
+            density = dm.density,
+        )
     }
 
     override fun findMessageField(pkg: String, preferredViewId: String?): Field? {
@@ -257,6 +280,34 @@ class A11yDevice(private val service: AccessibilityService) : Device {
         ref = n,
         className = n.className?.toString(),
     )
+
+    private fun rootForPackage(pkg: String): AccessibilityNodeInfo? {
+        val active = service.rootInActiveWindow
+        if (active?.packageName?.toString() == pkg) return active
+        return try {
+            service.windows?.firstOrNull { it.root?.packageName?.toString() == pkg }?.root
+        } catch (_: SecurityException) {
+            null
+        }
+    }
+
+    private fun collectEditables(
+        n: AccessibilityNodeInfo,
+        pkg: String,
+        depth: Int,
+        count: IntArray,
+        out: MutableList<Field>,
+    ) {
+        if (depth > MAX_DEPTH || count[0] >= MAX_NODES) return
+        count[0]++
+        if (n.isEditable && n.isVisibleToUser && n.packageName?.toString() == pkg && n.isFocusable) {
+            out += fieldOf(n, pkg)
+        }
+        for (i in 0 until n.childCount) {
+            val child = n.getChild(i) ?: continue
+            collectEditables(child, pkg, depth + 1, count, out)
+        }
+    }
 
     override fun fieldImeDiag(field: Field): FieldImeDiag {
         val n = field.ref as? AccessibilityNodeInfo

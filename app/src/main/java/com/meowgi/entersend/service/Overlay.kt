@@ -12,6 +12,8 @@ sealed interface Card {
     data class TeachingBar(
         val message: String,
         val edge: PopupEdge = PopupEdge.TOP,
+        /** When true, show a Skip button (Choice.NO) — used for optional auto-focus offer. */
+        val showSkip: Boolean = false,
     ) : Card
 
     /**

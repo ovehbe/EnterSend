@@ -93,7 +93,12 @@ class CardOverlay(private val service: AccessibilityService) : Overlay {
                 title.text = card.message
                 keys.setText(R.string.card_teaching_keys)
                 yes.visibility = View.GONE
-                no.visibility = View.GONE
+                if (card.showSkip) {
+                    no.visibility = View.VISIBLE
+                    no.setText(R.string.skip)
+                } else {
+                    no.visibility = View.GONE
+                }
                 close.setText(R.string.cancel)
             }
             is Card.Teaching -> {

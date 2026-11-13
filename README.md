@@ -40,12 +40,13 @@ Open EnterSend. The first-run setup has three steps, each with a check mark:
 Everything is reachable with the physical keyboard: arrow keys or Tab move focus (subtle Material tint;
 system orange focus highlight is disabled), Enter presses the focused control.
 
-## Auto-focus (0.3.12)
+## Auto-focus (0.3.13)
 
-Optional. Settings → **Auto-focus text field** (off by default). When on, opening a taught /
-learned chat app focuses its message box once per window appearance so the hardware keyboard
-can type immediately. Per-app Default / On / Off lives on the app action sheet. Never re-steals
-focus after you tap elsewhere; skips system apps and apps that are not set up.
+Per-app only (Apps → app sheet → Auto-focus: On/Off, default Off). When on, EnterSend finds a
+single editable field (or a taught identity) and focuses it once per window appearance so the
+hardware keyboard can type immediately. Multiple/zero fields prompt a short teach; if a11y
+focus/click both fail, a gesture tap fallback is used and labelled in the sheet. Optional step
+after send-button teach: “Also auto-focus…?”. Never re-steals focus; skips system apps.
 
 ## App UI (0.3.8)
 

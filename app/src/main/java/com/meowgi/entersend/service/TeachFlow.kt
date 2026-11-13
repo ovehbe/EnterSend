@@ -11,6 +11,7 @@ import com.meowgi.entersend.core.PopupPlacement
 import com.meowgi.entersend.core.SendFinder
 import com.meowgi.entersend.core.TapSpot
 import com.meowgi.entersend.data.AppRule
+import com.meowgi.entersend.data.AutoFocusPrefs
 
 /**
  * Two-step teach (Ömer's flow):
@@ -19,6 +20,9 @@ import com.meowgi.entersend.data.AppRule
  * 2. After evidence that a send happened with no usable click (box went non-empty→empty, or a
  *    click on a node [usableSend] rejects): step-2 bar, then full-screen capture once the box
  *    has text again. Capture taps are authoritative (no field-bounds reject).
+ *
+ * 0.3.13: after a successful send teach, optional auto-focus offer. Standalone
+ * [startAutoFocusTeach] when enabling auto-focus with 0/many editables.
  */
 class TeachFlow(
     private val device: Device,
@@ -28,6 +32,7 @@ class TeachFlow(
     private val today: () -> Long,
     private val versionOf: (String) -> Long?,
     private val strings: (Int) -> String = { "" },
+    private val autoFocusContext: android.content.Context? = null,
 ) {
     private sealed interface State
     private data object Idle : State
@@ -35,6 +40,10 @@ class TeachFlow(
     private class RetryBar(val pkg: String) : State
     private class Capturing(val pkg: String, var markerX: Int? = null, var markerY: Int? = null, var crop: Pixels? = null) : State
     private class Confirming(val pkg: String, val rule: AppRule, val crop: Pixels?) : State // legacy confirm
+    /** Optional: "Also auto-focus…? Tap it, or Skip." after send teach. */
+    private class AutoFocusOffer(val pkg: String) : State
+    /** Standalone: "Open the app and tap the text field" when enabling auto-focus. */
+    private class AutoFocusTeach(val pkg: String) : State
 
     private var state: State = Idle
     private val onChoice: (Choice) -> Unit = ::handleChoice
@@ -43,7 +52,8 @@ class TeachFlow(
     private var step1SawText = false
 
     val isTeaching: Boolean
-        get() = state is Listening || state is RetryBar || state is Capturing || state is Confirming
+        get() = state is Listening || state is RetryBar || state is Capturing || state is Confirming ||
+            state is AutoFocusOffer || state is AutoFocusTeach
 
     val isCapturing: Boolean get() = state is Capturing
 
@@ -52,6 +62,9 @@ class TeachFlow(
 
     /** Step 2 instruction bar ("Didn't catch that…"). */
     val isStep2Bar: Boolean get() = state is RetryBar
+
+    val isAutoFocusOffer: Boolean get() = state is AutoFocusOffer
+    val isAutoFocusTeach: Boolean get() = state is AutoFocusTeach
 
     /**
      * Starts a fresh teach session at step 1. Clears any prior step, timers, pending capture and
@@ -93,7 +106,12 @@ class TeachFlow(
     }
 
     fun onEnter(): Boolean {
-        return isTeaching // pass Enter through to the app while teaching
+        // Send-button teach: don't let EnterHandler consume Enter (pass through to the app).
+        // Auto-focus offer/teach must not block EnterSend's normal Enter → send path.
+        return when (state) {
+            is AutoFocusOffer, is AutoFocusTeach, Idle -> false
+            else -> isTeaching
+        }
     }
 
     fun onTextChanged(pkg: String) {
@@ -119,8 +137,22 @@ class TeachFlow(
             }
             is RetryBar -> promoteCaptureIfReady(s.pkg)
             is Capturing -> Unit
+            is AutoFocusOffer -> if (s.pkg == pkg && node.editable) saveAutoFocusTarget(pkg, node)
+            is AutoFocusTeach -> if (s.pkg == pkg && node.editable) saveAutoFocusTarget(pkg, node)
             else -> Unit
         }
+    }
+
+    /** Enable auto-focus teach when the Apps sheet toggle finds 0 or many editables. */
+    fun startAutoFocusTeach(pkg: String) {
+        resetSession()
+        state = AutoFocusTeach(pkg)
+        val field = device.focusedField()?.takeIf { it.packageName == pkg }
+        overlay.show(
+            Card.TeachingBar(strings(R.string.autofocus_teach), barEdge(field?.bounds, null)),
+            onChoice,
+        )
+        armSafetyTimeout(pkg)
     }
 
     fun onMissedClick() {
@@ -295,10 +327,14 @@ class TeachFlow(
         )
         store.saveTaught(rule, null)
         clearTimeouts()
-        state = Idle
         overlay.setTapListener(null)
+        state = Idle
         overlay.show(Card.Saved(target.desc ?: target.text, barEdge(field?.bounds, null)), onChoice)
-        main.postDelayed({ if (state is Idle) overlay.hide() }, SAVED_MS)
+        main.postDelayed({
+            if (state !is Idle) return@postDelayed
+            if (autoFocusContext != null) offerAutoFocus(pkg)
+            else overlay.hide()
+        }, SAVED_MS)
     }
 
     private fun saveCapture(capturing: Capturing) {
@@ -336,7 +372,51 @@ class TeachFlow(
             keyboardShown = ws.keyboardShown,
         )
         store.saveTaught(rule, crop)
-        finish()
+        if (autoFocusContext != null) offerAutoFocus(capturing.pkg)
+        else finish()
+    }
+
+    /** Visible for unit tests. */
+    internal fun offerAutoFocus(pkg: String) {
+        clearTimeouts()
+        state = AutoFocusOffer(pkg)
+        val field = device.focusedField()?.takeIf { it.packageName == pkg }
+        overlay.setTapListener(null)
+        overlay.show(
+            Card.TeachingBar(
+                strings(R.string.autofocus_offer),
+                barEdge(field?.bounds, null),
+                showSkip = true,
+            ),
+            onChoice,
+        )
+        armSafetyTimeout(pkg)
+    }
+
+    private fun saveAutoFocusTarget(pkg: String, node: NodeSnap) {
+        val ctx = autoFocusContext ?: return finish()
+        val ws = device.windowStateForPackage(pkg)
+            ?: device.focusedField()?.let { device.windowState(it) }
+        val w = ws?.width ?: 720
+        val h = ws?.height ?: 720
+        val target = AutoFocusPrefs.buildTarget(
+            viewId = node.viewId,
+            className = node.className,
+            boundsLeft = node.bounds.left,
+            boundsTop = node.bounds.top,
+            boundsRight = node.bounds.right,
+            boundsBottom = node.bounds.bottom,
+            windowWidth = w,
+            windowHeight = h,
+            tapFallback = false,
+        )
+        AutoFocusPrefs.setTarget(ctx, pkg, target)
+        AutoFocusPrefs.setEnabled(ctx, pkg, true)
+        clearTimeouts()
+        state = Idle
+        overlay.setTapListener(null)
+        overlay.show(Card.Saved(strings(R.string.autofocus_saved), barEdge(node.bounds, null)), onChoice)
+        main.postDelayed({ if (state is Idle) overlay.hide() }, SAVED_MS)
     }
 
     private fun handleChoice(choice: Choice) {
@@ -356,6 +436,15 @@ class TeachFlow(
                 Choice.CLOSE -> finish()
             }
             is Listening -> if (choice == Choice.CLOSE) finish()
+            is AutoFocusOffer -> when (choice) {
+                Choice.NO, Choice.CLOSE -> finish() // Skip or Cancel — leave autofocus off
+                else -> Unit
+            }
+            is AutoFocusTeach -> if (choice == Choice.CLOSE) {
+                // Cancel without enabling.
+                autoFocusContext?.let { AutoFocusPrefs.setEnabled(it, s.pkg, false) }
+                finish()
+            }
             Idle -> Unit
         }
     }

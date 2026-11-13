@@ -167,17 +167,23 @@ class EnterSendService : AccessibilityService() {
         store.setOnLoaded { pkg, state ->
             if (pkg == lastWindowPkg) prompt.onAppSeen(pkg, state.rule, source = "rule-loaded")
         }
-        val teach = TeachFlow(device, store, overlay, main, today, ::versionOf) { getString(it) }
+        AutoFocusPrefs.migrateIfNeeded(this)
+        val teach = TeachFlow(
+            device, store, overlay, main, today, ::versionOf,
+            strings = { getString(it) },
+            autoFocusContext = this,
+        )
         this.teach = teach
         val log = PromptDecisionLog.get(this)
         val enterDiag = EnterDiagLog.get(this)
         autoFocus = AutoFocusController(
             device = device,
-            store = store,
             policy = policy,
-            enabledFor = { pkg -> AutoFocusPrefs.enabledFor(this, pkg) },
+            isEnabled = { pkg -> AutoFocusPrefs.isEnabled(this, pkg) },
+            loadTarget = { pkg -> AutoFocusPrefs.target(this, pkg) },
+            saveTarget = { pkg, t -> AutoFocusPrefs.setTarget(this, pkg, t) },
             diag = enterDiag,
-            resolveMode = policy::resolveMode,
+            requestTeach = { pkg -> teach.startAutoFocusTeach(pkg) },
         )
         enter = EnterHandler(
             device, store, main,

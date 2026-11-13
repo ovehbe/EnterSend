@@ -39,11 +39,17 @@ interface Device {
      * Focus [field] for typing (auto-focus). Default: [focus]. Production may also try CLICK.
      */
     fun focusForTyping(field: Field): Boolean = focus(field)
+    /** ACTION_CLICK on the field's accessibility node (auto-focus fallback before gesture tap). */
+    fun clickField(field: Field): Boolean = false
     /**
      * Find the message compose field in [pkg], preferring [preferredViewId] when taught.
      * Null when nothing suitable is on screen.
      */
     fun findMessageField(pkg: String, preferredViewId: String?): Field? = null
+    /** All visible editable fields for [pkg] in the active / matching window. */
+    fun listEditableFields(pkg: String): List<Field> = emptyList()
+    /** Window metrics for [pkg] when no focused field is available. */
+    fun windowStateForPackage(pkg: String): WindowState? = null
     /** Short on-screen notice (debug toast or send-failed). No-op in headless tests unless recorded. */
     fun notice(message: String) {}
     /** Extra IME / action info for EnterDiagLog; default uses [Field] only. */

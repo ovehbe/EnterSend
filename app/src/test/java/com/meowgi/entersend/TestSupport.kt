@@ -89,13 +89,37 @@ class FakeDevice : Device {
         return true
     }
 
+    /** When false, [focus] returns false so tests can exercise click / tap fallback. */
+    var focusSucceeds: Boolean = true
+    /** When false, [clickField] returns false. */
+    var clickFieldSucceeds: Boolean = true
+    val fieldClicks = mutableListOf<Field>()
+
     override fun focus(field: Field): Boolean {
+        if (!focusSucceeds) return false
         focuses += field
         this.field = field
         return true
     }
 
-    override fun focusForTyping(field: Field): Boolean = focus(field)
+    override fun focusForTyping(field: Field): Boolean = focus(field) || clickField(field)
+
+    override fun clickField(field: Field): Boolean {
+        if (!clickFieldSucceeds) return false
+        fieldClicks += field
+        this.field = field
+        return true
+    }
+
+    override fun listEditableFields(pkg: String): List<Field> {
+        val fromList = messageFields.filter { it.packageName == pkg }
+        if (fromList.isNotEmpty()) return fromList
+        return root?.flatten()?.filter { it.editable && it.visible }?.map { n ->
+            Field(pkg, "", 0, 0, CHAT_TYPE, false, n.viewId, "Message", n.bounds, n.ref, n.className)
+        }.orEmpty()
+    }
+
+    override fun windowStateForPackage(pkg: String): WindowState? = window
 
     override fun findMessageField(pkg: String, preferredViewId: String?): Field? {
         val fromList = messageFields.filter { it.packageName == pkg }

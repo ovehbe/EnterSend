@@ -112,12 +112,7 @@ class MainActivity : AppCompatActivity() {
                 refreshUsageGrant()
             }
         }
-        findViewById<MaterialSwitch>(R.id.auto_focus_enabled).apply {
-            isChecked = AutoFocusPrefs.globalEnabled(this@MainActivity)
-            setOnCheckedChangeListener { _, checked ->
-                AutoFocusPrefs.setGlobalEnabled(this@MainActivity, checked)
-            }
-        }
+        AutoFocusPrefs.migrateIfNeeded(this)
         findViewById<View>(R.id.usage_grant).setOnClickListener {
             com.meowgi.entersend.service.UsageForeground.openSettings(this)
         }
@@ -345,13 +340,18 @@ class MainActivity : AppCompatActivity() {
             if (row.rule.isTaught) add(Action.LEARNED)
             add(Action.PASS_THROUGH)
             add(Action.OFF)
-            if (row.rule.isTaught) add(Action.AUTO_FOCUS)
+            add(Action.AUTO_FOCUS)
             if (row.rule.teachDeclined) add(Action.ASK_AGAIN)
             if (row.seen) add(Action.RESET)
         }
         val labels = actions.map { a ->
-            val text = getString(a.label)
-            if (a.mode == row.mode) getString(R.string.current_choice, text) else text
+            when (a) {
+                Action.AUTO_FOCUS -> autoFocusSheetLabel(row.pkg)
+                else -> {
+                    val text = getString(a.label)
+                    if (a.mode == row.mode) getString(R.string.current_choice, text) else text
+                }
+            }
         }
         AlertDialog.Builder(this)
             .setTitle(row.label)
@@ -359,10 +359,20 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun autoFocusSheetLabel(pkg: String): String {
+        val on = AutoFocusPrefs.isEnabled(this, pkg)
+        val fallback = AutoFocusPrefs.target(this, pkg)?.tapFallback == true
+        return when {
+            on && fallback -> getString(R.string.autofocus_sheet_on_fallback)
+            on -> getString(R.string.autofocus_sheet_on)
+            else -> getString(R.string.autofocus_sheet_off)
+        }
+    }
+
     private fun run(action: Action, row: AppRow) {
         when (action) {
             Action.TEACH, Action.RETEACH -> teach(row.pkg)
-            Action.AUTO_FOCUS -> showAutoFocusOverride(row)
+            Action.AUTO_FOCUS -> toggleAutoFocus(row)
             Action.ASK_AGAIN -> {
                 PromptPrefs.clearSnooze(this, row.pkg)
                 val updated = row.rule.copy(teachDeclined = false)
@@ -377,7 +387,7 @@ class MainActivity : AppCompatActivity() {
             Action.RESET -> {
                 // Instant empty state in the list, then persist.
                 PromptPrefs.clearSnooze(this, row.pkg)
-                AutoFocusPrefs.clearOverride(this, row.pkg)
+                AutoFocusPrefs.clear(this, row.pkg)
                 val cleared = AppRule(row.pkg)
                 applyOptimistic(row.pkg, cleared, policy.resolveMode(cleared))
                 write(row.pkg) {
@@ -400,23 +410,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showAutoFocusOverride(row: AppRow) {
-        val options = listOf(
-            AutoFocusPrefs.Override.DEFAULT to R.string.auto_focus_default,
-            AutoFocusPrefs.Override.ON to R.string.auto_focus_on,
-            AutoFocusPrefs.Override.OFF to R.string.auto_focus_off,
-        )
-        val current = AutoFocusPrefs.override(this, row.pkg)
-        val labels = options.map { (value, label) ->
-            val text = getString(label)
-            if (value == current) getString(R.string.current_choice, text) else text
-        }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.action_auto_focus)
-            .setItems(labels) { _, which ->
-                AutoFocusPrefs.setOverride(this, row.pkg, options[which].first)
-            }
-            .show()
+    private fun toggleAutoFocus(row: AppRow) {
+        val pkg = row.pkg
+        if (AutoFocusPrefs.isEnabled(this, pkg)) {
+            AutoFocusPrefs.setEnabled(this, pkg, false)
+            Toast.makeText(this, R.string.autofocus_sheet_off, Toast.LENGTH_SHORT).show()
+            return
+        }
+        AutoFocusPrefs.setEnabled(this, pkg, true)
+        val service = EnterSendService.instance
+        if (service?.teach == null) {
+            Toast.makeText(this, R.string.turn_on_first, Toast.LENGTH_LONG).show()
+            AutoFocusPrefs.setEnabled(this, pkg, false)
+            return
+        }
+        val ctrl = service.autoFocusControllerOrNull()
+        if (ctrl != null && ctrl.enableWithDetect(pkg)) {
+            Toast.makeText(this, R.string.autofocus_sheet_on, Toast.LENGTH_SHORT).show()
+            return
+        }
+        // 0 or many fields — teach already started via requestTeach; open the app.
+        if (service.teach?.isAutoFocusTeach != true) {
+            service.teach?.startAutoFocusTeach(pkg)
+        }
+        packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) }
+        Toast.makeText(this, R.string.autofocus_teach, Toast.LENGTH_LONG).show()
     }
 
     /** Immediate list + service update; [write] still persists on the IO thread. */

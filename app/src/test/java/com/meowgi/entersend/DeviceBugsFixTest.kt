@@ -148,7 +148,8 @@ class DeviceBugsFixTest {
         val teach = com.meowgi.entersend.service.TeachFlow(
             device, RuleStore(db.rules(), direct, direct, crops), overlay,
             android.os.Handler(Looper.getMainLooper()), { 20_000L }, { 1L },
-        ) { context().getString(it) }
+            strings = { context().getString(it) },
+        )
         teach.startTeaching("com.example.chat")
         device.field = device.field!!.copy(text = "x")
         teach.onTextChanged("com.example.chat")

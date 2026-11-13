@@ -17,8 +17,8 @@ android {
         applicationId = "com.meowgi.entersend"
         minSdk = 29
         targetSdk = 35
-        versionCode = 19
-        versionName = "0.3.12"
+        versionCode = 20
+        versionName = "0.3.13"
     }
 
     buildTypes {
