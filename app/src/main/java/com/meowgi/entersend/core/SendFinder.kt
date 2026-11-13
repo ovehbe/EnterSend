@@ -17,19 +17,28 @@ object SendFinder {
         "attach", "camera", "photo", "emoji",
     )
 
-    /** Node matching every attribute the user taught. */
+    /**
+     * Node matching the taught identity. Prefer view id / desc / text; for classPath-only rules
+     * resolve fresh near the focused field (multiline growth moves the button off the taught tap).
+     */
     fun learned(root: NodeSnap, field: Field, rule: AppRule): NodeSnap? {
         val byAttrs = rule.sendViewId != null || rule.sendDesc != null || rule.sendText != null
+        val maxGap = max(field.bounds.height * 2, 200).toDouble()
         val matches = root.flatten().filter { n ->
-            n.visible && n.enabled && !n.editable && if (byAttrs) {
-                (rule.sendViewId == null || n.viewId == rule.sendViewId) &&
-                    (rule.sendDesc == null || n.desc == rule.sendDesc) &&
-                    (rule.sendText == null || n.text == rule.sendText)
-            } else {
-                val x = rule.tapX
-                val y = rule.tapY
-                rule.sendClassPath != null && x != null && y != null &&
-                    n.classPath == rule.sendClassPath && n.bounds.contains(x, y)
+            if (!n.visible || !n.enabled || n.editable) return@filter false
+            when {
+                byAttrs ->
+                    (rule.sendViewId == null || n.viewId == rule.sendViewId) &&
+                        (rule.sendDesc == null || n.desc == rule.sendDesc) &&
+                        (rule.sendText == null || n.text == rule.sendText)
+                rule.sendClassPath != null && n.classPath == rule.sendClassPath -> {
+                    val x = rule.tapX
+                    val y = rule.tapY
+                    // Still covering the taught tap is ideal; otherwise near-field classPath.
+                    (x != null && y != null && n.bounds.contains(x, y)) ||
+                        n.bounds.distanceTo(field.bounds) <= maxGap
+                }
+                else -> false
             }
         }
         return matches.mapNotNull(::clickTarget).minByOrNull { it.bounds.distanceTo(field.bounds) }
@@ -64,5 +73,70 @@ object SendFinder {
             cur = c.parent
         }
         return null
+    }
+
+    /** Logging-only: every node considered for a learned match (does not change selection). */
+    fun diagnoseLearned(root: NodeSnap, field: Field, rule: AppRule): List<String> {
+        val byAttrs = rule.sendViewId != null || rule.sendDesc != null || rule.sendText != null
+        val maxGap = max(field.bounds.height * 2, 200).toDouble()
+        val strategy = when {
+            byAttrs -> "learned-attrs(viewId=${rule.sendViewId} desc=${rule.sendDesc} text=${rule.sendText})"
+            rule.sendClassPath != null -> "learned-classPath(${rule.sendClassPath} tap=${rule.tapX},${rule.tapY})"
+            else -> "learned-none"
+        }
+        val out = mutableListOf("strategy=$strategy")
+        var i = 0
+        for (n in root.flatten()) {
+            if (!n.visible || !n.enabled || n.editable) continue
+            val attrOk = byAttrs &&
+                (rule.sendViewId == null || n.viewId == rule.sendViewId) &&
+                (rule.sendDesc == null || n.desc == rule.sendDesc) &&
+                (rule.sendText == null || n.text == rule.sendText)
+            val x = rule.tapX
+            val y = rule.tapY
+            val coversTap = x != null && y != null && n.bounds.contains(x, y)
+            val dist = n.bounds.distanceTo(field.bounds)
+            val near = dist <= maxGap
+            val classOk = !byAttrs && rule.sendClassPath != null && n.classPath == rule.sendClassPath
+            val match = when {
+                byAttrs -> attrOk
+                classOk -> coversTap || near
+                else -> false
+            }
+            if (!match && !attrOk && !classOk) continue
+            i++
+            val target = clickTarget(n)
+            out += "  cand#$i id=${n.viewId} desc=${n.desc} text=${n.text} class=${n.className} " +
+                "path=${n.classPath} bounds=${n.bounds.left},${n.bounds.top},${n.bounds.right},${n.bounds.bottom} " +
+                "clickable=${n.clickable} coversTap=$coversTap distField=${"%.1f".format(dist)} near=$near " +
+                "clickTarget=${target?.let { "${it.viewId}@${it.bounds.left},${it.bounds.top}" } ?: "null"} " +
+                if (match && target != null) "PASS" else "FAIL"
+        }
+        if (i == 0) out += "  (no candidates)"
+        return out
+    }
+
+    /** Logging-only: auto send-label candidates. */
+    fun diagnoseAuto(root: NodeSnap, field: Field): List<String> {
+        val maxGap = max(field.bounds.height * 2, 200).toDouble()
+        val out = mutableListOf("strategy=AUTO")
+        var i = 0
+        for (n in root.flatten()) {
+            if (!n.visible || !n.enabled || n.editable) continue
+            val looks = looksLikeSend(n)
+            val dist = n.bounds.distanceTo(field.bounds)
+            val near = dist <= maxGap
+            val target = clickTarget(n)
+            if (!looks && target == null) continue
+            if (!looks) continue
+            i++
+            out += "  cand#$i id=${n.viewId} desc=${n.desc} text=${n.text} class=${n.className} " +
+                "bounds=${n.bounds.left},${n.bounds.top},${n.bounds.right},${n.bounds.bottom} " +
+                "looksLikeSend=$looks distField=${"%.1f".format(dist)} near=$near " +
+                "clickTarget=${target?.let { "${it.viewId}@${it.bounds.left},${it.bounds.top}" } ?: "null"} " +
+                if (looks && target != null && near) "PASS" else "FAIL"
+        }
+        if (i == 0) out += "  (no candidates)"
+        return out
     }
 }

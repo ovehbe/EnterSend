@@ -63,12 +63,15 @@ class FakeDevice : Device {
     var root: NodeSnap? = null
     var window: WindowState? = WindowState(1, 720, 720, keyboardShown = false, density = 1f)
     var live: Pixels? = null
+    /** Optional: return pixels based on the capture rect (multiline / moved-button fixtures). */
+    var liveForRect: ((Box) -> Pixels?)? = null
     /** Field text after a click or tap; null means the app did not send. */
     var textAfterSend: String? = ""
 
     val clicks = mutableListOf<NodeSnap>()
     val taps = mutableListOf<Pair<Int, Int>>()
     val focuses = mutableListOf<Field>()
+    val captureRects = mutableListOf<Box>()
     var captures = 0
     var imeEnters = 0
     var vibrations = 0
@@ -106,9 +109,37 @@ class FakeDevice : Device {
         imeEnters++
     }
 
+    /** When set, the next [nullCount] captures return null (screenshot throttle tests). */
+    var nullCapturesRemaining: Int = 0
+
     override fun capture(rect: Box, callback: (Pixels?) -> Unit) {
         captures++
-        callback(live)
+        captureRects += rect
+        if (nullCapturesRemaining > 0) {
+            nullCapturesRemaining--
+            callback(null)
+            return
+        }
+        liveForRect?.invoke(rect)?.let { callback(it); return }
+        val full = live
+        if (full == null) {
+            callback(null)
+            return
+        }
+        if (full.width == rect.width && full.height == rect.height) {
+            callback(full)
+            return
+        }
+        // Legacy unit tests supply a small solid crop as [live] while production now captures
+        // full-screen then crops candidates — expand a uniform buffer to the request size.
+        if (full.width < rect.width || full.height < rect.height) {
+            val color = full.argb[0]
+            if (full.argb.all { it == color }) {
+                callback(Pixels(rect.width, rect.height, IntArray(rect.width * rect.height) { color }))
+                return
+            }
+        }
+        callback(full.crop(rect))
     }
 
     override fun vibrate() {

@@ -81,6 +81,11 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.open_diagnostics).setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
+        findViewById<View>(R.id.share_enter_log).setOnClickListener { shareEnterLog() }
+        findViewById<View>(R.id.clear_enter_log).setOnClickListener {
+            com.meowgi.entersend.data.EnterDiagLog.get(this).clear()
+            Toast.makeText(this, R.string.enter_log_cleared, Toast.LENGTH_SHORT).show()
+        }
         findViewById<View>(R.id.home_goto_apps).setOnClickListener { selectTab(1) }
         findViewById<View>(R.id.status_action).setOnClickListener { ServiceWatch.openAccessibilitySettings(this) }
         findViewById<View>(R.id.profiles_button).setOnClickListener { selectTab(2) }
@@ -516,6 +521,19 @@ class MainActivity : AppCompatActivity() {
                     .show()
             }
             .show()
+    }
+
+    private fun shareEnterLog() {
+        val body = com.meowgi.entersend.data.EnterDiagLog.get(this).formatText()
+        startActivity(
+            Intent.createChooser(
+                Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_SUBJECT, getString(R.string.enter_log_subject))
+                    .putExtra(Intent.EXTRA_TEXT, body),
+                getString(R.string.enter_log_share),
+            ),
+        )
     }
 
     private fun showExportMenu() {

@@ -246,8 +246,8 @@ class Prompt032RegressionTest {
         assertEquals(android.view.View.GONE, again.findViewById<android.view.View>(R.id.usage_access_card).visibility)
         assertTrue(PromptPrefs.usageFallbackEnabled(context()))
 
-        assertEquals("0.3.8", BuildConfig.VERSION_NAME)
-        assertEquals(15, BuildConfig.VERSION_CODE)
+        assertEquals("0.3.11", BuildConfig.VERSION_NAME)
+        assertEquals(18, BuildConfig.VERSION_CODE)
     }
 
     @Test fun noiseDoesNotClearCurrentApp() {

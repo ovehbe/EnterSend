@@ -6,6 +6,18 @@ import com.meowgi.entersend.core.NodeSnap
 import com.meowgi.entersend.core.Pixels
 import com.meowgi.entersend.core.WindowState
 
+/** IME / action snapshot for Enter diagnostics (logging only). */
+data class FieldImeDiag(
+    val className: String?,
+    val inputType: Int,
+    val multiLine: Boolean,
+    val imeActionId: Int?,
+    val imeActionLabel: String?,
+    val actions: List<String>,
+    val hasImeEnterAction: Boolean,
+    val extrasHint: String?,
+)
+
 /** What the service does to the screen. [A11yDevice] in production, a fake in tests. */
 interface Device {
     fun focusedField(): Field?
@@ -25,4 +37,18 @@ interface Device {
     fun focus(field: Field): Boolean = false
     /** Short on-screen notice (debug toast or send-failed). No-op in headless tests unless recorded. */
     fun notice(message: String) {}
+    /** Extra IME / action info for EnterDiagLog; default uses [Field] only. */
+    fun fieldImeDiag(field: Field): FieldImeDiag {
+        val multi = field.inputType and android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0
+        return FieldImeDiag(
+            className = field.className,
+            inputType = field.inputType,
+            multiLine = multi,
+            imeActionId = null,
+            imeActionLabel = null,
+            actions = emptyList(),
+            hasImeEnterAction = false,
+            extrasHint = null,
+        )
+    }
 }

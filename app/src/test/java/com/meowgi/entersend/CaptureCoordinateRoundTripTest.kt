@@ -246,11 +246,12 @@ class CaptureCoordinateRoundTripTest {
         val rule = db.rules().get(pkg)
         assertNotNull(rule)
         assertNotNull(rule!!.tapDxDp)
-        // Primary path: field-relative dp must resolve back to the same screen pixel.
-        val resolved = TapSpot.resolve(rule, device.field, device.window!!, density, keyboardShown)!!
+        // 0.3.11: edge-anchored (and absolute) candidates must include the taught pixel;
+        // legacy center resolve alone can drift when dy is nearest-edge.
+        val cands = TapSpot.candidates(rule, device.field, device.window!!, density, keyboardShown)
         assertTrue(
-            "raw=($tapX,$tapY) marker=(${marked.markerX},${marked.markerY}) gesture=(${resolved.first},${resolved.second})",
-            abs(resolved.first - tapX) <= 2 && abs(resolved.second - tapY) <= 2,
+            "raw=($tapX,$tapY) marker=(${marked.markerX},${marked.markerY}) cands=$cands",
+            cands.any { abs(it.point.first - tapX) <= 2 && abs(it.point.second - tapY) <= 2 },
         )
 
         // Replay through Enter → dispatchGesture (FakeDevice.tap).

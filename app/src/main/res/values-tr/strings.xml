@@ -131,6 +131,11 @@
     <string name="diagnostics_copy">Kopyala</string>
     <string name="diagnostics_share">Paylaş</string>
     <string name="diagnostics_clear">Temizle</string>
+    <string name="enter_log_share">Enter kaydını paylaş</string>
+    <string name="enter_log_clear">Enter kaydını temizle</string>
+    <string name="enter_log_cleared">Enter kaydı temizlendi</string>
+    <string name="enter_log_subject">EnterSend Enter kaydı</string>
+    <string name="enter_log_section">Enter basış kaydı (son ~300)</string>
     <string name="diagnostics_copied">Kopyalandı</string>
 
     <!-- Hizmet durumu bildirimi -->
