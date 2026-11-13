@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Normal (install-time) permission for the short buzz after a successful send. -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Android 13+: the "EnterSend is off" notification. Asked once; the in-app banner works without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Optional Settings toggle: Usage Access backup for foreground detection. -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- Lets EnterSend see launchable apps: the Settings list and cleanup of uninstalled apps. -->
     <queries>
@@ -18,7 +23,8 @@
         android:name=".EnterSendApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.EnterSend">
@@ -37,6 +43,11 @@
             android:exported="false"
             android:label="@string/setup_title"
             android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ui.DiagnosticsActivity"
+            android:exported="false"
+            android:label="@string/diagnostics_title" />
 
         <service
             android:name=".service.EnterSendService"

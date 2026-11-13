@@ -1,7 +1,6 @@
 package com.meowgi.entersend.ui
 
 import android.Manifest
-import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -11,14 +10,15 @@ import android.view.KeyEvent
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
 import com.meowgi.entersend.R
 import com.meowgi.entersend.ServiceWatch
 
 /**
  * First run: 1) turn on the service, 2) press Enter and Shift+Enter, 3) a test chat box whose
- * Send button EnterSend should press on Enter.
+ * Send button EnterSend should press on Enter. Behavior unchanged; visuals are Material 3 cards.
  */
-class SetupActivity : Activity() {
+class SetupActivity : AppCompatActivity() {
     private var enterSeen = false
     private var shiftEnterSeen = false
     internal var sent = false

@@ -8,8 +8,12 @@ import com.meowgi.entersend.data.RuleDao
 import java.util.concurrent.Executor
 
 /**
- * In-memory copy of the rules for recently used apps. Key handling reads only from memory;
- * loading and every write run on [io], results are applied on [main].
+ * In-memory copy of the rules. Key handling reads only from memory; loading and every write
+ * run on [io], results are applied on [main].
+ *
+ * At service connect, [preloadAll] loads every DB row so Enter never has to guess Off /
+ * don't-ask / taught state. [getForEnter] may only invent a default [AppRule] for packages
+ * that are truly unknown (not in the DB).
  *
  * [refresh] uses a per-package generation so a Settings write that starts a second load is never
  * skipped while an older load is in flight, and a newer [putLocal] is never overwritten by a
@@ -23,11 +27,13 @@ class RuleStore(
 ) {
     class AppState(val rule: AppRule, val crop: Pixels?)
 
-    private val loaded = object : LinkedHashMap<String, AppState>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, AppState>) = size > 16
-    }
+    /** All stored rules stay resident — no LRU eviction (Enter must see Off/don't-ask). */
+    private val loaded = LinkedHashMap<String, AppState>(64, 0.75f, true)
     private val loading = HashSet<String>()
     private val generation = HashMap<String, Int>()
+    /** Packages that have (or had) a DB row — never invent a default for these while loading. */
+    private val knownFromDb = HashSet<String>()
+    @Volatile private var preloadDone = false
     private var foreground: String? = null
     private var onLoaded: ((String, AppState) -> Unit)? = null
 
@@ -38,6 +44,62 @@ class RuleStore(
 
     /** The app's state, or null while it is still loading. */
     fun get(pkg: String): AppState? = loaded[pkg] ?: run { refresh(pkg); loaded[pkg] }
+
+    /**
+     * Enter path — package comes from the focused input only.
+     *
+     * - Cached rule → use it (respects Off / don't-ask / taught).
+     * - After [preloadAll], unknown packages (no DB row) → default [AppRule] immediately.
+     * - Known DB package still loading, or preload not finished → null (Enter passes through).
+     */
+    fun getForEnter(pkg: String): AppState? {
+        loaded[pkg]?.let { return it }
+        if (!preloadDone) {
+            // Do not invent a default while Off/don't-ask rows may still be loading.
+            return null
+        }
+        if (pkg in knownFromDb || pkg in loading) {
+            // Stored decision exists (or is mid-load) — never optimistic-default over Off.
+            if (pkg !in loading) refresh(pkg)
+            return null
+        }
+        // Truly unknown app: safe default for Setup / undecided chat.
+        val fresh = AppState(AppRule(pkg), null)
+        loaded[pkg] = fresh
+        return fresh
+    }
+
+    /**
+     * Loads every DB rule (+ crops) into memory. Call from service connect so Enter never
+     * races a pending Off / don't-ask row.
+     */
+    fun preloadAll() {
+        io.execute {
+            val rules = dao.all()
+            val states = rules.map { rule ->
+                AppState(rule, rule.cropPath?.let(crops::load))
+            }
+            main.execute {
+                for (state in states) {
+                    val pkg = state.rule.packageName
+                    knownFromDb.add(pkg)
+                    // Don't clobber a newer putLocal that won the race.
+                    val gen = generation[pkg] ?: 0
+                    if (gen == 0 || loaded[pkg] == null) {
+                        loaded[pkg] = state
+                        generation[pkg] = gen.coerceAtLeast(1)
+                    }
+                }
+                preloadDone = true
+            }
+        }
+    }
+
+    /** Warm the in-memory rule without treating this as prompt-foreground. */
+    fun warm(pkg: String) {
+        if (loaded.containsKey(pkg) || pkg in loading) return
+        refresh(pkg)
+    }
 
     fun onForeground(pkg: String) {
         if (pkg == foreground) return
@@ -50,11 +112,13 @@ class RuleStore(
         generation[pkg] = gen
         loading.add(pkg)
         io.execute {
-            val rule = dao.get(pkg) ?: AppRule(pkg)
+            val fromDb = dao.get(pkg)
+            val rule = fromDb ?: AppRule(pkg)
             val crop = rule.cropPath?.let(crops::load)
             main.execute {
                 if (generation[pkg] != gen) return@execute
                 loading.remove(pkg)
+                if (fromDb != null) knownFromDb.add(pkg)
                 val state = AppState(rule, crop)
                 loaded[pkg] = state
                 onLoaded?.invoke(pkg, state)
@@ -70,6 +134,7 @@ class RuleStore(
         val pkg = rule.packageName
         generation[pkg] = (generation[pkg] ?: 0) + 1
         loading.remove(pkg)
+        knownFromDb.add(pkg)
         val existing = loaded[pkg]
         val resolvedCrop = when {
             crop != null -> crop
@@ -84,12 +149,14 @@ class RuleStore(
         }
     }
 
-    /** Drops the in-memory cache (used when switching profiles). */
+    /** Drops the in-memory cache (used when switching profiles). Keeps preload flag. */
     fun clearMemory() {
         loaded.clear()
         loading.clear()
         generation.clear()
+        knownFromDb.clear()
         foreground = null
+        preloadDone = false
     }
 
     /**
@@ -101,10 +168,20 @@ class RuleStore(
         for (rule in rules) {
             val crop = rule.cropPath?.let(crops::load)
             val state = AppState(rule, crop)
+            knownFromDb.add(rule.packageName)
             loaded[rule.packageName] = state
             generation[rule.packageName] = 1
             onLoaded?.invoke(rule.packageName, state)
         }
+        preloadDone = true
+    }
+
+    /** Test helper: drop one package from memory but remember it is a DB row. */
+    internal fun dropFromMemoryForTests(pkg: String) {
+        loaded.remove(pkg)
+        loading.remove(pkg)
+        knownFromDb.add(pkg)
+        preloadDone = true
     }
 
     fun recordResult(pkg: String, success: Boolean) {
@@ -130,7 +207,7 @@ class RuleStore(
     }
 
     fun markAsked(pkg: String, day: Long) {
-        update(pkg) { it.copy(lastAskedDay = day) }
+        putLocal((loaded[pkg]?.rule ?: AppRule(pkg)).copy(lastAskedDay = day))
         io.execute {
             dao.ensure(pkg)
             dao.setLastAsked(pkg, day)
@@ -138,15 +215,24 @@ class RuleStore(
     }
 
     fun decline(pkg: String) {
-        update(pkg) { it.copy(teachDeclined = true) }
+        putLocal((loaded[pkg]?.rule ?: AppRule(pkg)).copy(teachDeclined = true))
         io.execute {
             dao.ensure(pkg)
             dao.setDeclined(pkg)
         }
     }
 
+    /** Clears "don't ask again" so the next open can prompt. */
+    fun clearDeclined(pkg: String) {
+        putLocal((loaded[pkg]?.rule ?: AppRule(pkg)).copy(teachDeclined = false))
+        io.execute {
+            dao.ensure(pkg)
+            dao.clearDeclined(pkg)
+        }
+    }
+
     fun setOff(pkg: String) {
-        update(pkg) { it.copy(mode = Mode.OFF.name, teachDeclined = true) }
+        putLocal((loaded[pkg]?.rule ?: AppRule(pkg)).copy(mode = Mode.OFF.name, teachDeclined = true))
         io.execute {
             dao.ensure(pkg)
             dao.setOff(pkg)
@@ -158,6 +244,7 @@ class RuleStore(
         val pkg = rule.packageName
         generation[pkg] = (generation[pkg] ?: 0) + 1
         val gen = generation[pkg]!!
+        knownFromDb.add(pkg)
         io.execute {
             val previous = dao.get(pkg)?.cropPath
             val saved = rule.copy(

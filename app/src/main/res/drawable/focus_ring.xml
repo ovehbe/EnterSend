@@ -1,16 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Thick ring on whatever has keyboard focus, so D-pad / Tab navigation is always visible. -->
+<!-- Subtle Material focus state layer only — no thick outline, never on selected. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <stroke android:width="3dp" android:color="@color/focus" />
-            <corners android:radius="6dp" />
-        </shape>
-    </item>
-    <item android:state_selected="true">
-        <shape android:shape="rectangle">
-            <stroke android:width="3dp" android:color="@color/focus" />
-            <corners android:radius="6dp" />
+            <solid android:color="@color/focus_state_layer" />
+            <corners android:radius="8dp" />
         </shape>
     </item>
     <item android:drawable="@android:color/transparent" />

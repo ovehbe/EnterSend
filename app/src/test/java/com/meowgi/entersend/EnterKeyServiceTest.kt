@@ -9,6 +9,7 @@ import com.meowgi.entersend.data.AppDb
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.Mode
 import com.meowgi.entersend.service.EnterSendService
+import com.meowgi.entersend.service.RuleStore
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -16,9 +17,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import java.time.Duration
+import java.util.ArrayDeque
 
 /** Drives key events through EnterSendService.onKeyEvent, the real accessibility input path. */
 @RunWith(RobolectricTestRunner::class)
@@ -175,10 +178,35 @@ class EnterKeyServiceTest {
         assertEquals(listOf(false, false), start().press(1000))
     }
 
-    @Test fun ruleStillLoadingPassesThrough() {
+    @Test fun unknownAppAfterPreloadUsesDefaultAndSends() {
+        // Preload done, no DB row → default AppRule is OK (Setup / undecided chat).
         device.field = chatField("hello")
         device.root = window(sendButton())
-        val s = service(device, db, io = { })
+        val store = RuleStore(db.rules(), direct, direct, FakeCrops())
+        store.preloadAll()
+        val s = Robolectric.setupService(EnterSendService::class.java).apply {
+            attach(device, store, FakeOverlay())
+        }
+        assertEquals(listOf(true, true), s.press(1000))
+        assertEquals(1, device.clicks.size)
+    }
+
+    @Test fun offAppPendingLoadPassesThrough() {
+        // Stored Off must never be overwritten by an optimistic default while loading.
+        db.rules().upsert(AppRule("com.whatsapp", mode = Mode.OFF.name))
+        val pending = ArrayDeque<Runnable>()
+        val store = RuleStore(db.rules(), { pending.addLast(it) }, direct, FakeCrops())
+        store.preloadAll()
+        while (pending.isNotEmpty()) pending.removeFirst().run() // preload finishes — Off cached
+        store.dropFromMemoryForTests("com.whatsapp")
+        // Start a refresh that never completes.
+        store.refresh("com.whatsapp")
+        assertTrue(pending.isNotEmpty())
+        device.field = chatField("hello")
+        device.root = window(sendButton())
+        val s = Robolectric.setupService(EnterSendService::class.java).apply {
+            attach(device, store, FakeOverlay())
+        }
         assertEquals(listOf(false, false), s.press(1000))
         assertTrue(device.clicks.isEmpty())
     }

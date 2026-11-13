@@ -266,11 +266,13 @@ class Fix2BehaviorTest {
         val shadow = shadowOf(nm)
         notifier.onAppSeen("com.example.chat", AppRule("com.example.chat"))
         assertEquals(1, shadow.size())
-        nm.cancel(NewAppNotifier.notificationId("com.example.chat"))
+        nm.cancel(NewAppNotifier.TAG, NewAppNotifier.notificationId("com.example.chat"))
         assertEquals(0, shadow.size())
+        // Same foreground visit — session dedupe, not once-per-day.
         notifier.onAppSeen("com.example.chat", store.get("com.example.chat")!!.rule)
-        assertEquals(0, shadow.size()) // same day
+        assertEquals(0, shadow.size())
         store.setOff("com.example.chat")
+        notifier.onPackageLeft("com.example.chat")
         day++
         notifier.onAppSeen("com.example.chat", store.get("com.example.chat")!!.rule)
         assertEquals(0, shadow.size()) // Off

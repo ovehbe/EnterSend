@@ -17,8 +17,8 @@ android {
         applicationId = "com.meowgi.entersend"
         minSdk = 29
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.2.4"
+        versionCode = 15
+        versionName = "0.3.8"
     }
 
     buildTypes {
@@ -26,7 +26,8 @@ android {
             isDebuggable = true
         }
         release {
-            // Unsigned: no signingConfig. Minify off so the accessibility service needs no keep rules.
+            // Unsigned: no signingConfig. Minify off — accessibility / notification / prompt
+            // paths must not risk R8; 0.3.5 was not minified and R8 was not the empty-Apps cause.
             isMinifyEnabled = false
             signingConfig = null
         }
@@ -59,6 +60,9 @@ room {
 dependencies {
     implementation("androidx.room:room-runtime:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.core:core-ktx:1.15.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")

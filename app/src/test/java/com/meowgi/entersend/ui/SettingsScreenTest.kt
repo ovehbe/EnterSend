@@ -124,13 +124,19 @@ class SettingsScreenTest {
         assertEquals(2, list.adapter.count)
 
         a.findViewById<android.widget.CheckBox>(R.id.needs_teaching).isChecked = true
+        settle()
         assertEquals(1, list.adapter.count)
         assertEquals("Telegram", (list.adapter.getItem(0) as AppRow).label)
 
         a.findViewById<android.widget.CheckBox>(R.id.needs_teaching).isChecked = false
+        settle()
         a.findViewById<android.widget.EditText>(R.id.search).setText("whats")
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(150))
+        settle()
         assertEquals(1, list.adapter.count)
         a.findViewById<android.widget.EditText>(R.id.search).setText("zzz")
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(150))
+        settle()
         assertEquals(0, list.adapter.count)
         assertEquals(a.getString(R.string.no_apps_match), a.findViewById<TextView>(R.id.empty).text.toString())
     }

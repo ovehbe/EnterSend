@@ -23,6 +23,10 @@ class AppRow(
     val mode: Mode,
     val isSystemApp: Boolean,
 ) {
+    /** Instant UI update after a Settings write, before the background reload finishes. */
+    fun withRule(rule: AppRule, mode: Mode = this.mode): AppRow =
+        AppRow(pkg, label, icon, rule, versionCode, mode, isSystemApp)
+
     val blocked: Boolean get() = pkg in AppLists.NEVER
 
     /** EnterSend has data for this app (a real DB row with user-visible state). */
@@ -67,12 +71,16 @@ class AppRow(
 }
 
 object AppRows {
-    /** Launchable apps plus apps with a saved rule. Touches the package manager; call off the main thread. */
+    /**
+     * Launchable apps plus apps with a saved rule. Touches the package manager; call off the
+     * main thread. Exact 0.3.3 listing path — do not change the query or isSystem semantics.
+     */
     fun load(context: Context, rules: List<AppRule>, policy: SystemAppPolicy = SystemAppPolicy(context)): List<AppRow> {
         val pm = context.packageManager
         val byPkg = rules.associateBy { it.packageName }
         val launchable = pm.queryIntentActivities(
-            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0,
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
+            0,
         ).map { it.activityInfo.packageName }
         return (launchable + byPkg.keys).distinct().filter { it != context.packageName }.map { pkg ->
             val info = try {
@@ -95,7 +103,7 @@ object AppRows {
 
     /**
      * Apps EnterSend has seen first, then alphabetical; narrowed by [query], [needsTeachingOnly],
-     * and [showSystemApps] (system packages hidden unless checked).
+     * and [showSystemApps] (system packages hidden unless checked). Exact 0.3.3 filter semantics.
      */
     fun filter(
         rows: List<AppRow>,

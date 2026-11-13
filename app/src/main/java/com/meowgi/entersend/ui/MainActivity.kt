@@ -1,7 +1,6 @@
 package com.meowgi.entersend.ui
 
 import android.Manifest
-import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
@@ -13,33 +12,50 @@ import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
 import android.view.View
+import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.ViewFlipper
+import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.button.MaterialButton
+import com.meowgi.entersend.BuildConfig
 import com.meowgi.entersend.EnterSendApp
 import com.meowgi.entersend.R
 import com.meowgi.entersend.ServiceWatch
+import com.meowgi.entersend.core.SystemAppPolicy
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.ConfigJson
 import com.meowgi.entersend.data.Mode
 import com.meowgi.entersend.data.ProfileStore
+import com.meowgi.entersend.data.PromptPrefs
 import com.meowgi.entersend.service.EnterSendService
 import java.io.File
 
-/** Settings: per-app modes, health, teaching, profiles, and config export/import. */
-class MainActivity : Activity() {
+/**
+ * Material 3 shell: Home status, Apps list, Profiles, Settings.
+ * Service / teach / export / profile semantics are unchanged — this is UI structure only.
+ */
+class MainActivity : AppCompatActivity() {
     private val app get() = application as EnterSendApp
     private lateinit var adapter: AppListAdapter
+    private lateinit var profileAdapter: ProfileListAdapter
     private lateinit var search: EditText
     private lateinit var needsOnly: CheckBox
     private lateinit var showSystem: CheckBox
     private lateinit var empty: TextView
+    private lateinit var appsLoading: View
     private lateinit var profileLabel: TextView
+    private lateinit var pager: ViewFlipper
+    private lateinit var bottomNav: BottomNavigationView
     private lateinit var profiles: ProfileStore
     private var rows: List<AppRow>? = null
     private var exportAllProfiles = true
+    private val policy by lazy { SystemAppPolicy(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +66,10 @@ class MainActivity : Activity() {
         app.io.execute { profiles.ensureDefault(app.db.rules()) }
 
         setContentView(R.layout.activity_main)
+        pager = findViewById(R.id.pager)
+        bottomNav = findViewById(R.id.bottom_nav)
+        profileLabel = findViewById(R.id.profile_label)
+
         findViewById<View>(R.id.banner_fix).setOnClickListener { ServiceWatch.openAccessibilitySettings(this) }
         findViewById<View>(R.id.banner_notifications_fix).setOnClickListener {
             if (Build.VERSION.SDK_INT >= 33) {
@@ -57,21 +77,62 @@ class MainActivity : Activity() {
             }
         }
         findViewById<View>(R.id.open_setup).setOnClickListener { startActivity(Intent(this, SetupActivity::class.java)) }
-        findViewById<View>(R.id.profiles_button).setOnClickListener { showProfilesMenu() }
+        findViewById<View>(R.id.settings_open_setup).setOnClickListener { startActivity(Intent(this, SetupActivity::class.java)) }
+        findViewById<View>(R.id.open_diagnostics).setOnClickListener {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
+        }
+        findViewById<View>(R.id.home_goto_apps).setOnClickListener { selectTab(1) }
+        findViewById<View>(R.id.status_action).setOnClickListener { ServiceWatch.openAccessibilitySettings(this) }
+        findViewById<View>(R.id.profiles_button).setOnClickListener { selectTab(2) }
         findViewById<View>(R.id.export_button).setOnClickListener { showExportMenu() }
         findViewById<View>(R.id.import_button).setOnClickListener { startImport() }
-        profileLabel = findViewById(R.id.profile_label)
+        findViewById<View>(R.id.profile_save_as).setOnClickListener { saveProfileAs() }
+        findViewById<View>(R.id.profile_rename).setOnClickListener { renameProfile() }
+        findViewById<View>(R.id.profile_delete).setOnClickListener { deleteProfile() }
+
+        findViewById<TextView>(R.id.settings_version).text =
+            getString(R.string.settings_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+
+        findViewById<MaterialSwitch>(R.id.prompts_enabled).apply {
+            isChecked = PromptPrefs.promptsEnabled(this@MainActivity)
+            setOnCheckedChangeListener { _, checked ->
+                PromptPrefs.setPromptsEnabled(this@MainActivity, checked)
+            }
+        }
+        findViewById<MaterialSwitch>(R.id.usage_fallback).apply {
+            isChecked = PromptPrefs.usageFallbackEnabled(this@MainActivity)
+            setOnCheckedChangeListener { _, checked ->
+                PromptPrefs.setUsageFallbackEnabled(this@MainActivity, checked)
+                refreshUsageGrant()
+            }
+        }
+        findViewById<View>(R.id.usage_grant).setOnClickListener {
+            com.meowgi.entersend.service.UsageForeground.openSettings(this)
+        }
+        findViewById<View>(R.id.usage_access_grant).setOnClickListener {
+            com.meowgi.entersend.service.UsageForeground.openSettings(this)
+        }
+
         handleTeachIntent(intent)
         search = findViewById(R.id.search)
         needsOnly = findViewById(R.id.needs_teaching)
         showSystem = findViewById(R.id.show_system_apps)
         empty = findViewById(R.id.empty)
+        appsLoading = findViewById(R.id.apps_loading)
         adapter = AppListAdapter(this)
         findViewById<ListView>(R.id.apps).apply {
             adapter = this@MainActivity.adapter
             emptyView = empty
             setOnItemClickListener { _, _, position, _ -> showActions(this@MainActivity.adapter.getItem(position)) }
         }
+
+        profileAdapter = ProfileListAdapter(this) { meta -> switchToProfile(meta) }
+        findViewById<ListView>(R.id.profiles_list).adapter = profileAdapter
+
+        findViewById<View>(R.id.refresh_apps).setOnClickListener {
+            reload(toastWhenDone = true)
+        }
+
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -79,6 +140,30 @@ class MainActivity : Activity() {
         })
         needsOnly.setOnCheckedChangeListener { _, _ -> applyFilter() }
         showSystem.setOnCheckedChangeListener { _, _ -> applyFilter() }
+
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_home -> pager.displayedChild = 0
+                R.id.nav_apps -> pager.displayedChild = 1
+                R.id.nav_profiles -> {
+                    pager.displayedChild = 2
+                    refreshProfiles()
+                }
+                R.id.nav_settings -> pager.displayedChild = 3
+            }
+            true
+        }
+        // Subtle focus state layer on bottom-nav items for D-pad / Tab (no system orange rect).
+        bottomNav.post {
+            for (i in 0 until bottomNav.menu.size()) {
+                val itemView = (bottomNav.getChildAt(0) as? ViewGroup)?.getChildAt(i) ?: continue
+                itemView.foreground = getDrawable(R.drawable.focus_ring)
+                itemView.isFocusable = true
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    itemView.defaultFocusHighlightEnabled = false
+                }
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -88,15 +173,14 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        val running = ServiceWatch.isRunning()
-        findViewById<View>(R.id.banner).visibility = if (running) View.GONE else View.VISIBLE
-        val notifDenied = Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        findViewById<View>(R.id.banner_notifications).visibility = if (notifDenied) View.VISIBLE else View.GONE
-        ServiceWatch.updateNotice(this, running)
+        refreshStatusUi()
+        refreshUsageGrant()
+        ServiceWatch.updateNotice(this, ServiceWatch.isRunning())
         refreshProfileLabel()
+        refreshProfiles()
         reload()
     }
+
 
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -109,22 +193,116 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun selectTab(index: Int) {
+        pager.displayedChild = index
+        bottomNav.selectedItemId = when (index) {
+            1 -> R.id.nav_apps
+            2 -> R.id.nav_profiles
+            3 -> R.id.nav_settings
+            else -> R.id.nav_home
+        }
+        if (index == 2) refreshProfiles()
+    }
+
+    private fun refreshStatusUi() {
+        val running = ServiceWatch.isRunning()
+        findViewById<View>(R.id.banner).visibility = if (running) View.GONE else View.VISIBLE
+        val notifDenied = Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        findViewById<View>(R.id.banner_notifications).visibility = if (notifDenied) View.VISIBLE else View.GONE
+
+        val card = findViewById<View>(R.id.status_card)
+        val title = findViewById<TextView>(R.id.status_title)
+        val body = findViewById<TextView>(R.id.status_body)
+        val action = findViewById<MaterialButton>(R.id.status_action)
+        if (running) {
+            card.setBackgroundResource(R.drawable.status_card_bg)
+            title.setText(R.string.status_on_title)
+            body.setText(R.string.status_on_body)
+            action.visibility = View.GONE
+        } else {
+            card.setBackgroundResource(R.drawable.status_card_bg_off)
+            title.setText(R.string.status_off_title)
+            body.setText(R.string.status_off_body)
+            action.visibility = View.VISIBLE
+            action.setText(R.string.turn_on)
+        }
+    }
+
     private fun handleTeachIntent(intent: Intent?) {
         val pkg = intent?.getStringExtra(com.meowgi.entersend.service.NotifyActionReceiver.EXTRA_PACKAGE) ?: return
-        teach(pkg)
+        val showActions = intent.getBooleanExtra(
+            com.meowgi.entersend.service.NotifyActionReceiver.EXTRA_SHOW_ACTIONS,
+            false,
+        )
+        if (showActions) {
+            // Fallback when the accessibility overlay chooser can't be shown.
+            selectTab(1)
+            setAppsLoading(true)
+            app.io.execute {
+                val loaded = AppRows.load(this, app.db.rules().all(), policy)
+                runOnUiThread {
+                    rows = loaded
+                    applyFilter()
+                    setAppsLoading(false)
+                    loaded.firstOrNull { it.pkg == pkg }?.let { showActions(it) }
+                }
+            }
+        } else {
+            teach(pkg)
+        }
+    }
+
+    private fun refreshUsageGrant() {
+        val usage = com.meowgi.entersend.service.UsageForeground(this)
+        val granted = usage.hasPermission()
+        // Home card: optional Usage Access — visible until granted; auto-enable backup when granted.
+        val homeCard = findViewById<View>(R.id.usage_access_card)
+        if (granted) {
+            homeCard.visibility = View.GONE
+            if (!PromptPrefs.usageFallbackEnabled(this)) {
+                PromptPrefs.setUsageFallbackEnabled(this, true)
+                findViewById<MaterialSwitch>(R.id.usage_fallback).isChecked = true
+            }
+        } else {
+            homeCard.visibility = View.VISIBLE
+        }
+        val needGrant = PromptPrefs.usageFallbackEnabled(this) && !granted
+        findViewById<View>(R.id.usage_grant).visibility = if (needGrant) View.VISIBLE else View.GONE
     }
 
     private fun refreshProfileLabel() {
         profileLabel.text = getString(R.string.profile_active, profiles.activeName())
     }
 
-    private fun reload() {
+    private fun refreshProfiles() {
+        val list = profiles.list()
+        profileAdapter.submit(list, profiles.activeId())
+        findViewById<View>(R.id.profiles_empty).visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Exact 0.3.3 Apps load on a background thread. Blocks the Apps page with a spinner
+     * until the full list is ready, then swaps it in once on the main thread.
+     */
+    private fun reload(toastWhenDone: Boolean = false) {
+        setAppsLoading(true)
         app.io.execute {
-            val loaded = AppRows.load(this, app.db.rules().all())
+            val loaded = AppRows.load(this, app.db.rules().all(), policy)
             runOnUiThread {
                 rows = loaded
                 applyFilter()
+                setAppsLoading(false)
+                if (toastWhenDone) {
+                    Toast.makeText(this, R.string.apps_refreshed, Toast.LENGTH_SHORT).show()
+                }
             }
+        }
+    }
+
+    private fun setAppsLoading(loading: Boolean) {
+        if (::appsLoading.isInitialized) {
+            appsLoading.visibility = if (loading) View.VISIBLE else View.GONE
         }
     }
 
@@ -142,7 +320,11 @@ class MainActivity : Activity() {
 
     private fun showActions(row: AppRow) {
         if (row.blocked) {
-            AlertDialog.Builder(this).setTitle(row.label).setMessage(R.string.blocked_app).setPositiveButton(android.R.string.ok, null).show()
+            AlertDialog.Builder(this)
+                .setTitle(row.label)
+                .setMessage(R.string.blocked_app)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
             return
         }
         val actions = buildList {
@@ -151,6 +333,7 @@ class MainActivity : Activity() {
             if (row.rule.isTaught) add(Action.LEARNED)
             add(Action.PASS_THROUGH)
             add(Action.OFF)
+            if (row.rule.teachDeclined) add(Action.ASK_AGAIN)
             if (row.seen) add(Action.RESET)
         }
         val labels = actions.map { a ->
@@ -166,25 +349,49 @@ class MainActivity : Activity() {
     private fun run(action: Action, row: AppRow) {
         when (action) {
             Action.TEACH, Action.RETEACH -> teach(row.pkg)
-            Action.RESET -> write(row.pkg) {
-                row.rule.cropPath?.let { File(it).delete() }
-                app.db.rules().delete(row.pkg)
-                AppRule(row.pkg)
+            Action.ASK_AGAIN -> {
+                PromptPrefs.clearSnooze(this, row.pkg)
+                val updated = row.rule.copy(teachDeclined = false)
+                applyOptimistic(row.pkg, updated, policy.resolveMode(updated))
+                write(row.pkg) {
+                    val dao = app.db.rules()
+                    dao.ensure(row.pkg)
+                    dao.clearDeclined(row.pkg)
+                    dao.get(row.pkg)!!.copy(teachDeclined = false)
+                }
             }
-            else -> write(row.pkg) {
-                val dao = app.db.rules()
-                dao.ensure(row.pkg)
-                val updated = dao.get(row.pkg)!!.copy(mode = action.mode!!.name)
-                dao.upsert(updated)
-                updated
+            Action.RESET -> {
+                // Instant empty state in the list, then persist.
+                PromptPrefs.clearSnooze(this, row.pkg)
+                val cleared = AppRule(row.pkg)
+                applyOptimistic(row.pkg, cleared, policy.resolveMode(cleared))
+                write(row.pkg) {
+                    row.rule.cropPath?.let { File(it).delete() }
+                    app.db.rules().delete(row.pkg)
+                    cleared
+                }
+            }
+            else -> {
+                val updated = row.rule.copy(mode = action.mode!!.name)
+                applyOptimistic(row.pkg, updated, action.mode)
+                write(row.pkg) {
+                    val dao = app.db.rules()
+                    dao.ensure(row.pkg)
+                    val saved = dao.get(row.pkg)!!.copy(mode = action.mode.name)
+                    dao.upsert(saved)
+                    saved
+                }
             }
         }
     }
 
-    /**
-     * Persists on the IO thread, then pushes the new rule into the live [RuleStore] so the
-     * accessibility service applies the change immediately (no restart).
-     */
+    /** Immediate list + service update; [write] still persists on the IO thread. */
+    private fun applyOptimistic(pkg: String, rule: AppRule, mode: Mode) {
+        EnterSendService.instance?.store?.putLocal(rule)
+        rows = rows?.map { if (it.pkg == pkg) it.withRule(rule, mode) else it }
+        applyFilter()
+    }
+
     private fun write(pkg: String, block: () -> AppRule?) {
         app.io.execute {
             val rule = block() ?: AppRule(pkg)
@@ -201,6 +408,7 @@ class MainActivity : Activity() {
         if (service == null || service.teach == null) {
             Toast.makeText(this, R.string.turn_on_first, Toast.LENGTH_LONG).show()
             findViewById<View>(R.id.banner).visibility = View.VISIBLE
+            selectTab(0)
             return
         }
         if (launch == null) {
@@ -211,30 +419,11 @@ class MainActivity : Activity() {
         startActivity(launch)
     }
 
-    private fun showProfilesMenu() {
-        val items = arrayOf(
-            getString(R.string.profile_save_as),
-            getString(R.string.profile_switch),
-            getString(R.string.profile_rename),
-            getString(R.string.profile_delete),
-        )
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.profiles_title))
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> saveProfileAs()
-                    1 -> switchProfile()
-                    2 -> renameProfile()
-                    3 -> deleteProfile()
-                }
-            }
-            .show()
-    }
-
     private fun saveProfileAs() {
         val input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
             hint = getString(R.string.profile_name_hint)
+            foreground = getDrawable(R.drawable.focus_ring)
         }
         AlertDialog.Builder(this)
             .setTitle(R.string.profile_save_as)
@@ -245,6 +434,7 @@ class MainActivity : Activity() {
                     profiles.saveCurrentAs(name, app.db.rules())
                     runOnUiThread {
                         refreshProfileLabel()
+                        refreshProfiles()
                         Toast.makeText(this, R.string.profile_saved, Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -253,26 +443,17 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun switchProfile() {
-        val list = profiles.list()
-        val labels = list.map {
-            if (it.id == profiles.activeId()) getString(R.string.current_choice, it.name) else it.name
-        }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.profile_switch)
-            .setItems(labels) { _, which ->
-                val meta = list[which]
-                if (meta.id == profiles.activeId()) return@setItems
-                app.io.execute {
-                    profiles.switchTo(meta.id, app.db.rules(), EnterSendService.instance?.store)
-                    runOnUiThread {
-                        refreshProfileLabel()
-                        reload()
-                        Toast.makeText(this, getString(R.string.profile_switched, meta.name), Toast.LENGTH_SHORT).show()
-                    }
-                }
+    private fun switchToProfile(meta: ProfileStore.Meta) {
+        if (meta.id == profiles.activeId()) return
+        app.io.execute {
+            profiles.switchTo(meta.id, app.db.rules(), EnterSendService.instance?.store)
+            runOnUiThread {
+                refreshProfileLabel()
+                refreshProfiles()
+                reload()
+                Toast.makeText(this, getString(R.string.profile_switched, meta.name), Toast.LENGTH_SHORT).show()
             }
-            .show()
+        }
     }
 
     private fun renameProfile() {
@@ -285,6 +466,7 @@ class MainActivity : Activity() {
                 val input = EditText(this).apply {
                     setText(meta.name)
                     inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+                    foreground = getDrawable(R.drawable.focus_ring)
                 }
                 AlertDialog.Builder(this)
                     .setTitle(R.string.profile_rename)
@@ -293,6 +475,7 @@ class MainActivity : Activity() {
                         val name = input.text.toString().trim().ifEmpty { return@setPositiveButton }
                         profiles.rename(meta.id, name)
                         refreshProfileLabel()
+                        refreshProfiles()
                     }
                     .setNegativeButton(android.R.string.cancel, null)
                     .show()
@@ -319,6 +502,7 @@ class MainActivity : Activity() {
                                 profiles.delete(meta.id, app.db.rules(), EnterSendService.instance?.store)
                                 runOnUiThread {
                                     refreshProfileLabel()
+                                    refreshProfiles()
                                     reload()
                                 }
                             } catch (e: IllegalStateException) {
@@ -343,6 +527,7 @@ class MainActivity : Activity() {
             .setTitle(R.string.export_config)
             .setItems(items) { _, which ->
                 exportAllProfiles = which == 0
+                @Suppress("DEPRECATION")
                 startActivityForResult(
                     Intent(Intent.ACTION_CREATE_DOCUMENT)
                         .addCategory(Intent.CATEGORY_OPENABLE)
@@ -355,6 +540,7 @@ class MainActivity : Activity() {
     }
 
     private fun startImport() {
+        @Suppress("DEPRECATION")
         startActivityForResult(
             Intent(Intent.ACTION_OPEN_DOCUMENT)
                 .addCategory(Intent.CATEGORY_OPENABLE)
@@ -383,6 +569,7 @@ class MainActivity : Activity() {
             profiles.importBundle(bundle, app.db.rules(), EnterSendService.instance?.store)
             runOnUiThread {
                 refreshProfileLabel()
+                refreshProfiles()
                 reload()
                 Toast.makeText(this, R.string.import_done, Toast.LENGTH_SHORT).show()
             }
@@ -404,12 +591,12 @@ class MainActivity : Activity() {
         LEARNED(R.string.mode_learned, Mode.LEARNED),
         PASS_THROUGH(R.string.mode_pass_through, Mode.PASS_THROUGH),
         OFF(R.string.mode_off, Mode.OFF),
+        ASK_AGAIN(R.string.action_ask_again),
         RESET(R.string.action_reset),
     }
 
     companion object {
         const val KEY_SETUP_DONE = "setup_done"
-        private const val KEY_ASKED_NOTIFICATIONS = "asked_notifications"
         private const val REQ_EXPORT = 41
         private const val REQ_IMPORT = 42
 

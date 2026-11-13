@@ -93,6 +93,23 @@ class AppDbMigrationTest {
         }
     }
 
+    @Test fun v2RulesSurviveUpgradeToV3WithEmptyAppCache() {
+        insertV1Data()
+        helper.runMigrationsAndValidate(name, 2, true, AppDb.MIGRATION_1_2).close()
+        helper.runMigrationsAndValidate(name, 3, true, AppDb.MIGRATION_2_3).close()
+
+        val db = AppDb.build(context(), name)
+        try {
+            val (wa, cacheCount) = offMain {
+                db.rules().get("com.whatsapp")!! to db.apps().count()
+            }
+            assertEquals(41, wa.successCount)
+            assertEquals(0, cacheCount)
+        } finally {
+            db.close()
+        }
+    }
+
     @Test fun unknownVersionFailsInsteadOfWipingData() {
         insertV1Data()
         context().openOrCreateDatabase(name, 0, null).use { it.version = AppDb.VERSION + 1 }
