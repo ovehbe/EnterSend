@@ -17,8 +17,8 @@ android {
         applicationId = "com.meowgi.entersend"
         minSdk = 29
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.3.5"
+        versionCode = 13
+        versionName = "0.3.6"
     }
 
     buildTypes {
@@ -26,8 +26,14 @@ android {
             isDebuggable = true
         }
         release {
-            // Unsigned: no signingConfig. Minify off so the accessibility service needs no keep rules.
-            isMinifyEnabled = false
+            // Minify on (0.3.6+): prove Room/entities survive R8. Unsigned by default;
+            // emulator proof resigns with the debug keystore.
+            isMinifyEnabled = true
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = null
         }
     }

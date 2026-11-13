@@ -25,12 +25,18 @@ import com.meowgi.entersend.data.Mode
 class SystemAppPolicy(private val context: Context) {
     private val pm: PackageManager get() = context.packageManager
 
+    // Cached across a policy instance — Apps list walks every package and previously
+    // re-resolved HOME / IME / Settings on each call (very expensive on real devices).
+    private val homePkg: String? by lazy { resolveHomePackage() }
+    private val imePkgs: Set<String> by lazy { resolveEnabledImePackages() }
+    private val settingsPkg: String? by lazy { resolveSettingsPackage() }
+
     fun isAlwaysOff(pkg: String): Boolean {
         // Not ourselves: SetupActivity's test compose box must receive Enter → send.
         if (isSystemUi(pkg)) return true
-        if (pkg == homePackage()) return true
-        if (pkg in enabledImePackages()) return true
-        if (isSettingsApp(pkg)) return true
+        if (pkg == homePkg) return true
+        if (pkg in imePkgs) return true
+        if (pkg == "com.android.settings" || pkg == settingsPkg) return true
         return false
     }
 
@@ -51,6 +57,17 @@ class SystemAppPolicy(private val context: Context) {
     fun isSystemApp(pkg: String): Boolean {
         if (isAlwaysOff(pkg) || isHiddenSystemApp(pkg)) return true
         return hasSystemFlag(pkg)
+    }
+
+    /**
+     * Apps-list visibility (0.3.6+). On some OEM ROMs (e.g. Unihertz) launchable chat apps
+     * live under /system or /product and carry FLAG_SYSTEM — hiding every FLAG_SYSTEM package
+     * yields an empty Apps page. Only hide always-off packages and non-launchable system junk;
+     * launchable FLAG_SYSTEM apps stay visible (prompt/mode defaults still use [defaultsOff]).
+     */
+    fun hideFromAppsList(pkg: String): Boolean {
+        if (isAlwaysOff(pkg)) return true
+        return hasSystemFlag(pkg) && !hasLauncherIcon(pkg)
     }
 
     /** Defaults Off with no prompt — always-off list or any system-flagged package. */
@@ -80,24 +97,36 @@ class SystemAppPolicy(private val context: Context) {
         return pm.queryIntentActivities(launch, 0).isNotEmpty()
     }
 
-    fun homePackage(): String? {
+    fun homePackage(): String? = homePkg
+
+    fun enabledImePackages(): Set<String> = imePkgs
+
+    fun isSettingsApp(pkg: String): Boolean =
+        pkg == "com.android.settings" || pkg == settingsPkg
+
+    private fun resolveHomePackage(): String? {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        return pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
-    }
-
-    fun enabledImePackages(): Set<String> {
-        val imm = context.getSystemService(InputMethodManager::class.java) ?: return emptySet()
-        return imm.enabledInputMethodList.map { it.packageName }.toSet()
-    }
-
-    fun isSettingsApp(pkg: String): Boolean {
-        if (pkg == "com.android.settings") return true
         return try {
-            val intent = Intent(Settings.ACTION_SETTINGS)
-            pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName == pkg
+            pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
         } catch (_: RuntimeException) {
-            false
+            null
         }
+    }
+
+    private fun resolveEnabledImePackages(): Set<String> {
+        val imm = context.getSystemService(InputMethodManager::class.java) ?: return emptySet()
+        return try {
+            imm.enabledInputMethodList.map { it.packageName }.toSet()
+        } catch (_: RuntimeException) {
+            emptySet()
+        }
+    }
+
+    private fun resolveSettingsPackage(): String? = try {
+        val intent = Intent(Settings.ACTION_SETTINGS)
+        pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+    } catch (_: RuntimeException) {
+        null
     }
 
     fun isSystemUi(pkg: String): Boolean =

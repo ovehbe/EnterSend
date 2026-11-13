@@ -208,6 +208,18 @@
             android:orientation="vertical"
             android:paddingTop="4dp">
 
+            <TextView
+                android:id="@+id/apps_diag"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="12dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textIsSelectable="true"
+                android:textSize="11sp" />
+
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

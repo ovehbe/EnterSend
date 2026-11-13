@@ -54,6 +54,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var needsOnly: CheckBox
     private lateinit var showSystem: CheckBox
     private lateinit var empty: TextView
+    private lateinit var appsDiag: TextView
     private lateinit var profileLabel: TextView
     private lateinit var pager: ViewFlipper
     private lateinit var bottomNav: BottomNavigationView
@@ -132,6 +133,7 @@ class MainActivity : AppCompatActivity() {
         needsOnly = findViewById(R.id.needs_teaching)
         showSystem = findViewById(R.id.show_system_apps)
         empty = findViewById(R.id.empty)
+        appsDiag = findViewById(R.id.apps_diag)
         adapter = AppListAdapter(this)
         findViewById<ListView>(R.id.apps).apply {
             adapter = this@MainActivity.adapter
@@ -314,6 +316,7 @@ class MainActivity : AppCompatActivity() {
         if (!current.isNullOrEmpty()) {
             val ms = SystemClock.elapsedRealtime() - t0
             Log.d(AppCatalog.TAG, "apps_load source=memory ms=$ms count=${current.size}")
+            publishAppsDiag()
             return
         }
         reload(forceScan = current != null && current.isEmpty())
@@ -344,10 +347,26 @@ class MainActivity : AppCompatActivity() {
                     rows = loaded
                 }
                 scheduleFilter(immediate = true)
+                publishAppsDiag()
                 if (toastWhenDone) {
                     Toast.makeText(this, R.string.apps_refreshed, Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    private fun publishAppsDiag(shownOverride: Int? = null) {
+        if (!::appsDiag.isInitialized) return
+        val d = app.catalog.lastDiagnostics
+        val shown = shownOverride ?: d.shown
+        val line = if (shownOverride != null) {
+            d.copy(shown = shown).line()
+        } else {
+            d.line()
+        }
+        appsDiag.text = line
+        if (shownOverride != null) {
+            app.catalog.updateShownCount(shown)
         }
     }
 
@@ -358,6 +377,7 @@ class MainActivity : AppCompatActivity() {
         empty.setText(if (all == null) R.string.loading_apps else R.string.no_apps_match)
         if (all == null) {
             adapter.submit(emptyList())
+            publishAppsDiag(shownOverride = 0)
             return
         }
         val t0 = SystemClock.elapsedRealtime()
@@ -366,6 +386,7 @@ class MainActivity : AppCompatActivity() {
         Log.d(AppCatalog.TAG, "apps_search q='${search.text}' ms=$lastSearchMs results=${filtered.size} sync=1")
         empty.setText(R.string.no_apps_match)
         adapter.submit(filtered)
+        publishAppsDiag(shownOverride = filtered.size)
     }
 
     /**
@@ -411,6 +432,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 empty.setText(R.string.no_apps_match)
                 adapter.submit(filtered)
+                publishAppsDiag(shownOverride = filtered.size)
             }
         }
     }
