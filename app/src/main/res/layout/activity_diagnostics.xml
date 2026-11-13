@@ -64,13 +64,63 @@
         android:layout_weight="1"
         android:fillViewport="true">
 
-        <TextView
-            android:id="@+id/diag_log"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:textIsSelectable="true"
-            android:textAppearance="?attr/textAppearanceBodySmall"
-            android:textSize="11sp" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/diag_log"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textSize="11sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/enter_log_section"
+                android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/enter_log_share"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/enter_log_share" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/enter_log_clear"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/enter_log_clear" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/enter_diag_log"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textSize="11sp" />
+        </LinearLayout>
     </ScrollView>
 </LinearLayout>

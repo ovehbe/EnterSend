@@ -10,12 +10,31 @@ import kotlin.math.max
  */
 object CropMatch {
     private const val GRID = 12
-    private const val MAX_MEAN_DIFF = 12.0
-    private const val MAX_CELL_DIFF = 48
+    const val MAX_MEAN_DIFF = 12.0
+    const val MAX_CELL_DIFF = 48
 
-    fun matches(saved: Pixels, live: Pixels): Boolean {
-        if (saved.width != live.width || saved.height != live.height) return false
-        if (saved.width < GRID || saved.height < GRID) return false
+    /** Detailed score for Enter diagnostics; [matches] stays the production gate. */
+    data class Score(
+        val meanDiff: Double,
+        val worstCell: Int,
+        val sizeOk: Boolean,
+        val dims: String,
+        val pass: Boolean,
+    ) {
+        fun line(): String =
+            "cropMatch mean=${"%.2f".format(meanDiff)} threshMean=$MAX_MEAN_DIFF " +
+                "worst=$worstCell threshWorst=$MAX_CELL_DIFF sizeOk=$sizeOk dims=$dims " +
+                if (pass) "PASS" else "FAIL"
+    }
+
+    fun score(saved: Pixels, live: Pixels): Score {
+        val dims = "${saved.width}x${saved.height}->${live.width}x${live.height}"
+        if (saved.width != live.width || saved.height != live.height) {
+            return Score(Double.POSITIVE_INFINITY, Int.MAX_VALUE, sizeOk = false, dims = dims, pass = false)
+        }
+        if (saved.width < GRID || saved.height < GRID) {
+            return Score(Double.POSITIVE_INFINITY, Int.MAX_VALUE, sizeOk = false, dims = dims, pass = false)
+        }
         val a = cells(saved)
         val b = cells(live)
         var sum = 0L
@@ -25,8 +44,12 @@ object CropMatch {
             sum += d
             worst = max(worst, d)
         }
-        return sum.toDouble() / a.size <= MAX_MEAN_DIFF && worst <= MAX_CELL_DIFF
+        val mean = sum.toDouble() / a.size
+        val pass = mean <= MAX_MEAN_DIFF && worst <= MAX_CELL_DIFF
+        return Score(mean, worst, sizeOk = true, dims = dims, pass = pass)
     }
+
+    fun matches(saved: Pixels, live: Pixels): Boolean = score(saved, live).pass
 
     private fun cells(p: Pixels): IntArray {
         val out = IntArray(GRID * GRID * 3)

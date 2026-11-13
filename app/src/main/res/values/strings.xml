@@ -134,6 +134,11 @@
     <string name="diagnostics_copy">Copy</string>
     <string name="diagnostics_share">Share</string>
     <string name="diagnostics_clear">Clear</string>
+    <string name="enter_log_share">Share Enter log</string>
+    <string name="enter_log_clear">Clear Enter log</string>
+    <string name="enter_log_cleared">Enter log cleared</string>
+    <string name="enter_log_subject">EnterSend Enter log</string>
+    <string name="enter_log_section">Enter press log (last ~300)</string>
     <string name="diagnostics_copied">Copied</string>
 
     <!-- Service state notification -->

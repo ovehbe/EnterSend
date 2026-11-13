@@ -19,6 +19,7 @@ import com.meowgi.entersend.ServiceWatch
 import com.meowgi.entersend.core.KeyGate
 import com.meowgi.entersend.core.SystemAppPolicy
 import com.meowgi.entersend.data.CropFiles
+import com.meowgi.entersend.data.EnterDiagLog
 import com.meowgi.entersend.data.PromptDecisionLog
 import java.time.LocalDate
 
@@ -167,6 +168,7 @@ class EnterSendService : AccessibilityService() {
         val teach = TeachFlow(device, store, overlay, main, today, ::versionOf) { getString(it) }
         this.teach = teach
         val log = PromptDecisionLog.get(this)
+        val enterDiag = EnterDiagLog.get(this)
         enter = EnterHandler(
             device, store, main,
             offerTeach = { rule ->
@@ -189,6 +191,7 @@ class EnterSendService : AccessibilityService() {
                     "Enter pkg=$pkg rule=$ruleLabel consumed=$consumed",
                 )
             },
+            diag = enterDiag,
         )
     }
 

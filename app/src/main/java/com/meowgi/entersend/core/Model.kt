@@ -31,6 +31,8 @@ data class Field(
     val hint: String?,
     val bounds: Box,
     val ref: Any? = null,
+    /** Accessibility class name of the focused node (diag / logging). */
+    val className: String? = null,
 )
 
 /** Snapshot of one accessibility node; [ref] is the live node in production. */

@@ -34,6 +34,7 @@ class A11yDevice(private val service: AccessibilityService) : Device {
             hint = n.hintText?.toString(),
             bounds = boundsOf(n),
             ref = n,
+            className = n.className?.toString(),
         )
     }
 
@@ -161,6 +162,86 @@ class A11yDevice(private val service: AccessibilityService) : Device {
         // Prefer accessibility focus + input focus so the next message can be typed immediately.
         n.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
         return n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+    }
+
+    override fun fieldImeDiag(field: Field): FieldImeDiag {
+        val n = field.ref as? AccessibilityNodeInfo
+        val multi = field.inputType and android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0
+        if (n == null) {
+            return FieldImeDiag(
+                className = field.className,
+                inputType = field.inputType,
+                multiLine = multi,
+                imeActionId = null,
+                imeActionLabel = null,
+                actions = emptyList(),
+                hasImeEnterAction = false,
+                extrasHint = null,
+            )
+        }
+        val actions = mutableListOf<String>()
+        var hasImeEnter = false
+        for (a in n.actionList) {
+            val id = a.id
+            val label = a.label?.toString()
+            val name = when (id) {
+                AccessibilityNodeInfo.ACTION_CLICK -> "CLICK"
+                AccessibilityNodeInfo.ACTION_FOCUS -> "FOCUS"
+                AccessibilityNodeInfo.ACTION_SET_TEXT -> "SET_TEXT"
+                AccessibilityNodeInfo.ACTION_NEXT_AT_MOVEMENT_GRANULARITY -> "NEXT_GRAN"
+                AccessibilityNodeInfo.ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY -> "PREV_GRAN"
+                else -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                    id == AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id
+                ) {
+                    hasImeEnter = true
+                    "IME_ENTER"
+                } else {
+                    "action_$id"
+                }
+            }
+            actions += if (label.isNullOrBlank()) name else "$name($label)"
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            n.actionList.any { it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id }
+        ) {
+            hasImeEnter = true
+        }
+        // EditorInfo is not always exposed via a11y; pull common extras when present.
+        var imeActionId: Int? = null
+        var imeActionLabel: String? = null
+        var extrasHint: String? = null
+        try {
+            val ex = n.extras
+            if (ex != null && !ex.isEmpty) {
+                val keys = ex.keySet().toList()
+                extrasHint = keys.joinToString(",")
+                for (k in keys) {
+                    val lk = k.lowercase()
+                    if (imeActionId == null && (lk.contains("ime_action") || lk.contains("imeaction"))) {
+                        imeActionId = when (val v = ex.get(k)) {
+                            is Int -> v
+                            is Number -> v.toInt()
+                            else -> null
+                        }
+                    }
+                    if (imeActionLabel == null && lk.contains("action") && lk.contains("label")) {
+                        imeActionLabel = ex.get(k)?.toString()
+                    }
+                }
+            }
+        } catch (_: RuntimeException) {
+            extrasHint = "extras-error"
+        }
+        return FieldImeDiag(
+            className = field.className ?: n.className?.toString(),
+            inputType = field.inputType,
+            multiLine = multi,
+            imeActionId = imeActionId,
+            imeActionLabel = imeActionLabel,
+            actions = actions,
+            hasImeEnterAction = hasImeEnter,
+            extrasHint = extrasHint,
+        )
     }
 
     private fun rootOf(field: Field): AccessibilityNodeInfo? =
