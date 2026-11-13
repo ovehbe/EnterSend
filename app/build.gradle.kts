@@ -17,8 +17,8 @@ android {
         applicationId = "com.meowgi.entersend"
         minSdk = 29
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.3.6"
+        versionCode = 14
+        versionName = "0.3.7"
     }
 
     buildTypes {
@@ -26,14 +26,9 @@ android {
             isDebuggable = true
         }
         release {
-            // Minify on (0.3.6+): prove Room/entities survive R8. Unsigned by default;
-            // emulator proof resigns with the debug keystore.
-            isMinifyEnabled = true
-            isShrinkResources = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
+            // Unsigned: no signingConfig. Minify off — accessibility / notification / prompt
+            // paths must not risk R8; 0.3.5 was not minified and R8 was not the empty-Apps cause.
+            isMinifyEnabled = false
             signingConfig = null
         }
     }

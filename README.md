@@ -40,7 +40,7 @@ Open EnterSend. The first-run setup has three steps, each with a check mark:
 Everything is reachable with the physical keyboard: arrow keys or Tab move focus (subtle Material tint;
 system orange focus highlight is disabled), Enter presses the focused control.
 
-## App UI (0.3.6)
+## App UI (0.3.7)
 
 Material 3 shell with light/dark (and dynamic color on Android 12+), built for the Q25’s short
 square screen and hardware keyboard (D-pad / Tab friendly focus tint).

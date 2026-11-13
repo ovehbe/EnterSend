@@ -21,22 +21,19 @@ import com.meowgi.entersend.data.Mode
  * All FLAG_SYSTEM / FLAG_UPDATED_SYSTEM_APP packages default Off and are never auto-prompted
  * (including launchable ones like stock Messages). The user can still enable them in Settings.
  * Only launcher-visible non-system apps are prompted once when opened without a config.
+ *
+ * Home / IME / Settings are resolved fresh on every call — this instance is held for the life
+ * of the accessibility service and the prompt path, and the user can switch launcher or IME.
  */
 class SystemAppPolicy(private val context: Context) {
     private val pm: PackageManager get() = context.packageManager
 
-    // Cached across a policy instance — Apps list walks every package and previously
-    // re-resolved HOME / IME / Settings on each call (very expensive on real devices).
-    private val homePkg: String? by lazy { resolveHomePackage() }
-    private val imePkgs: Set<String> by lazy { resolveEnabledImePackages() }
-    private val settingsPkg: String? by lazy { resolveSettingsPackage() }
-
     fun isAlwaysOff(pkg: String): Boolean {
         // Not ourselves: SetupActivity's test compose box must receive Enter → send.
         if (isSystemUi(pkg)) return true
-        if (pkg == homePkg) return true
-        if (pkg in imePkgs) return true
-        if (pkg == "com.android.settings" || pkg == settingsPkg) return true
+        if (pkg == homePackage()) return true
+        if (pkg in enabledImePackages()) return true
+        if (isSettingsApp(pkg)) return true
         return false
     }
 
@@ -97,36 +94,24 @@ class SystemAppPolicy(private val context: Context) {
         return pm.queryIntentActivities(launch, 0).isNotEmpty()
     }
 
-    fun homePackage(): String? = homePkg
-
-    fun enabledImePackages(): Set<String> = imePkgs
-
-    fun isSettingsApp(pkg: String): Boolean =
-        pkg == "com.android.settings" || pkg == settingsPkg
-
-    private fun resolveHomePackage(): String? {
+    fun homePackage(): String? {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        return try {
-            pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
-        } catch (_: RuntimeException) {
-            null
-        }
+        return pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
     }
 
-    private fun resolveEnabledImePackages(): Set<String> {
+    fun enabledImePackages(): Set<String> {
         val imm = context.getSystemService(InputMethodManager::class.java) ?: return emptySet()
-        return try {
-            imm.enabledInputMethodList.map { it.packageName }.toSet()
-        } catch (_: RuntimeException) {
-            emptySet()
-        }
+        return imm.enabledInputMethodList.map { it.packageName }.toSet()
     }
 
-    private fun resolveSettingsPackage(): String? = try {
-        val intent = Intent(Settings.ACTION_SETTINGS)
-        pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
-    } catch (_: RuntimeException) {
-        null
+    fun isSettingsApp(pkg: String): Boolean {
+        if (pkg == "com.android.settings") return true
+        return try {
+            val intent = Intent(Settings.ACTION_SETTINGS)
+            pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName == pkg
+        } catch (_: RuntimeException) {
+            false
+        }
     }
 
     fun isSystemUi(pkg: String): Boolean =
