@@ -63,12 +63,15 @@ class FakeDevice : Device {
     var root: NodeSnap? = null
     var window: WindowState? = WindowState(1, 720, 720, keyboardShown = false, density = 1f)
     var live: Pixels? = null
+    /** Optional: return pixels based on the capture rect (multiline / moved-button fixtures). */
+    var liveForRect: ((Box) -> Pixels?)? = null
     /** Field text after a click or tap; null means the app did not send. */
     var textAfterSend: String? = ""
 
     val clicks = mutableListOf<NodeSnap>()
     val taps = mutableListOf<Pair<Int, Int>>()
     val focuses = mutableListOf<Field>()
+    val captureRects = mutableListOf<Box>()
     var captures = 0
     var imeEnters = 0
     var vibrations = 0
@@ -108,7 +111,8 @@ class FakeDevice : Device {
 
     override fun capture(rect: Box, callback: (Pixels?) -> Unit) {
         captures++
-        callback(live)
+        captureRects += rect
+        callback(liveForRect?.invoke(rect) ?: live)
     }
 
     override fun vibrate() {

@@ -2,7 +2,6 @@ package com.meowgi.entersend.service
 
 import android.os.Handler
 import android.view.KeyEvent
-import com.meowgi.entersend.core.Box
 import com.meowgi.entersend.core.ChatFieldGuard
 import com.meowgi.entersend.core.CropMatch
 import com.meowgi.entersend.core.Field
@@ -95,7 +94,10 @@ class EnterHandler(
         }
         val token = Any()
         inFlight = token
-        val rect = Box(rule.cropLeft, rule.cropTop!!, rule.cropRight!!, rule.cropBottom!!)
+        // Validate the icon at the *live* resolved point — not the absolute crop rect from
+        // teach time. Multiline growth moves the compose row; saved cropLeft/Top then miss the
+        // button and Enter used to fall through to IME newline until the user deleted lines.
+        val rect = TapSpot.cropBox(point.first, point.second, ws)
         device.capture(rect) { live ->
             if (inFlight !== token) return@capture
             if (live != null && CropMatch.matches(crop, live)) {

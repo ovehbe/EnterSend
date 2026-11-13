@@ -17,19 +17,28 @@ object SendFinder {
         "attach", "camera", "photo", "emoji",
     )
 
-    /** Node matching every attribute the user taught. */
+    /**
+     * Node matching the taught identity. Prefer view id / desc / text; for classPath-only rules
+     * resolve fresh near the focused field (multiline growth moves the button off the taught tap).
+     */
     fun learned(root: NodeSnap, field: Field, rule: AppRule): NodeSnap? {
         val byAttrs = rule.sendViewId != null || rule.sendDesc != null || rule.sendText != null
+        val maxGap = max(field.bounds.height * 2, 200).toDouble()
         val matches = root.flatten().filter { n ->
-            n.visible && n.enabled && !n.editable && if (byAttrs) {
-                (rule.sendViewId == null || n.viewId == rule.sendViewId) &&
-                    (rule.sendDesc == null || n.desc == rule.sendDesc) &&
-                    (rule.sendText == null || n.text == rule.sendText)
-            } else {
-                val x = rule.tapX
-                val y = rule.tapY
-                rule.sendClassPath != null && x != null && y != null &&
-                    n.classPath == rule.sendClassPath && n.bounds.contains(x, y)
+            if (!n.visible || !n.enabled || n.editable) return@filter false
+            when {
+                byAttrs ->
+                    (rule.sendViewId == null || n.viewId == rule.sendViewId) &&
+                        (rule.sendDesc == null || n.desc == rule.sendDesc) &&
+                        (rule.sendText == null || n.text == rule.sendText)
+                rule.sendClassPath != null && n.classPath == rule.sendClassPath -> {
+                    val x = rule.tapX
+                    val y = rule.tapY
+                    // Still covering the taught tap is ideal; otherwise near-field classPath.
+                    (x != null && y != null && n.bounds.contains(x, y)) ||
+                        n.bounds.distanceTo(field.bounds) <= maxGap
+                }
+                else -> false
             }
         }
         return matches.mapNotNull(::clickTarget).minByOrNull { it.bounds.distanceTo(field.bounds) }
