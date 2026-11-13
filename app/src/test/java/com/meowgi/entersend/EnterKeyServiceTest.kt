@@ -346,12 +346,12 @@ class EnterKeyServiceTest {
 
     // --- Saved tap spot ---
 
-    private val crop = solid(0xFF2196F3.toInt())
+    private val crop = solid(0xFF2196F3.toInt(), 80, 80)
     private fun tapSpotRule() = AppRule(
         "com.example.chat",
         fieldViewId = "com.example.chat:id/input",
         tapX = 650, tapY = 640,
-        cropPath = "/crops/a.png", cropLeft = 626, cropTop = 616, cropRight = 674, cropBottom = 664,
+        cropPath = "/crops/a.png", cropLeft = 610, cropTop = 600, cropRight = 690, cropBottom = 680,
         orientation = 1, windowWidth = 720, windowHeight = 720,
     )
 
@@ -363,7 +363,7 @@ class EnterKeyServiceTest {
 
     @Test fun tapSpotTapsWhenLiveScreenshotMatches() {
         tapSpotScene()
-        device.live = solid(0xFF2196F3.toInt())
+        device.live = solid(0xFF2196F3.toInt(), 80, 80)
         assertEquals(listOf(true, true), start(mapOf("/crops/a.png" to crop)).press(1000))
         assertEquals(listOf(650 to 640), device.taps)
         settle()
@@ -372,7 +372,7 @@ class EnterKeyServiceTest {
 
     @Test fun tapSpotDoesNotTapWhenLiveScreenshotDiffers() {
         tapSpotScene()
-        device.live = solid(0xFF4CAF50.toInt()) // the button now looks different (e.g. a mic)
+        device.live = solid(0xFF4CAF50.toInt(), 80, 80) // the button now looks different (e.g. a mic)
         start(mapOf("/crops/a.png" to crop)).press(1000)
         assertTrue(device.taps.isEmpty())
         assertEquals(1, device.imeEnters)
@@ -382,8 +382,10 @@ class EnterKeyServiceTest {
         tapSpotScene()
         device.live = null
         start(mapOf("/crops/a.png" to crop)).press(1000)
+        settle() // allow screenshot retry (~350ms) to finish
         assertTrue(device.taps.isEmpty())
-        assertEquals(1, device.imeEnters)
+        // 0.3.11: throttled/null screenshot swallows — does not imeEnter a false newline
+        assertEquals(0, device.imeEnters)
     }
 
     @Test fun tapSpotPassesThroughWhenOrientationChanged() {

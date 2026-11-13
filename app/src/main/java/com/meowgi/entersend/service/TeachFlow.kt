@@ -323,7 +323,9 @@ class TeachFlow(
             sendViewId = null, sendText = null, sendDesc = null, sendClassPath = null,
             tapX = x, tapY = y,
             tapDxDp = TapSpot.dxDp(field.bounds, x, density),
-            tapDyDp = TapSpot.dyDp(field.bounds, y, density),
+            // Nearest vertical edge (bottom/top) so multiline growth that keeps the bottom fixed
+            // still resolves; absolute tapX/tapY remain as a crop-gated fallback.
+            tapDyDp = TapSpot.dyNearestEdgeDp(field.bounds, y, density),
             tapFx = TapSpot.fx(ws, x),
             tapFy = TapSpot.fy(ws, y),
             cropLeft = cropRect.left, cropTop = cropRect.top,

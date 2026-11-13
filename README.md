@@ -96,8 +96,8 @@ When Enter is pressed (key repeats and duplicate events count as one press):
 5. Otherwise find the send button, in this order:
    1. the rule the user taught for this app (view id / text / content description, or class path at the taught spot);
    2. auto-detect: a clickable node near the field labelled send (English or Turkish: Send, Gönder, …);
-   3. the saved tap spot: tapped only if orientation and window size match and a live screenshot of the spot
-      still matches the saved crop;
+   3. the saved tap spot: try edge-anchored, absolute, then proportional candidates; tap the first whose
+      live crop still matches the taught crop (no blind taps);
    4. none found: Enter passes through.
 6. After a click, the field must empty within ~1.7 s to count as a success (short vibration); otherwise it
    counts as a failure. While a send is unconfirmed, further Enter presses are swallowed.
@@ -164,8 +164,10 @@ no prompt) for the buzz after a send and `POST_NOTIFICATIONS` for the service-of
 
 ## Known limits
 
-- When a saved tap spot fails the live screenshot check after Enter was already taken, Enter is re-delivered
+- When every tap-spot candidate fails the live crop check after Enter was already taken, Enter is re-delivered
   with the accessibility IME-Enter action. Standard Android text fields treat it like Enter; custom editors may not.
+  A null screenshot (AccessibilityService ~1/s rate limit) is retried once after ~350 ms or reused if a shot
+  younger than 1 s is cached — it does not silently insert a newline.
 - Screenshots need Android 11+; on Android 10 the tap-spot fallback is skipped.
 - Shift+Enter rewrites the field text through accessibility, so rich-text spans (e.g. @mentions) may be lost.
 - Alt+Y / Alt+N must be held as chords. While the ask or confirm card is up, the Alt symbol on the Y and N keys

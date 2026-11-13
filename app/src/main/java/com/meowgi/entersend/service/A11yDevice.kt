@@ -19,6 +19,9 @@ import com.meowgi.entersend.core.Pixels
 import com.meowgi.entersend.core.WindowState
 
 class A11yDevice(private val service: AccessibilityService) : Device {
+    /** Last full-display screenshot for crop reuse within [SCREENSHOT_CACHE_MS] (rate-limit). */
+    @Volatile private var cachedShot: Pixels? = null
+    @Volatile private var cachedShotAtMs: Long = 0L
 
     override fun focusedField(): Field? {
         val n = service.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return null
@@ -130,6 +133,12 @@ class A11yDevice(private val service: AccessibilityService) : Device {
             callback(null)
             return
         }
+        val now = android.os.SystemClock.elapsedRealtime()
+        val cached = cachedShot
+        if (cached != null && now - cachedShotAtMs in 0 until SCREENSHOT_CACHE_MS) {
+            callback(cached.crop(rect) ?: cached.takeIf { it.width == rect.width && it.height == rect.height })
+            return
+        }
         service.takeScreenshot(
             Display.DEFAULT_DISPLAY,
             service.mainExecutor,
@@ -139,7 +148,17 @@ class A11yDevice(private val service: AccessibilityService) : Device {
                     val shot = Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)
                         ?.copy(Bitmap.Config.ARGB_8888, false)
                     buffer.close()
-                    callback(shot?.let { crop(it, rect) })
+                    if (shot == null) {
+                        callback(null)
+                        return
+                    }
+                    val full = crop(shot, Box(0, 0, shot.width, shot.height)) ?: run {
+                        callback(null)
+                        return
+                    }
+                    cachedShot = full
+                    cachedShotAtMs = android.os.SystemClock.elapsedRealtime()
+                    callback(full.crop(rect) ?: full.takeIf { rect.width >= full.width && rect.height >= full.height })
                 }
 
                 override fun onFailure(errorCode: Int) = callback(null)
@@ -270,6 +289,8 @@ class A11yDevice(private val service: AccessibilityService) : Device {
     companion object {
         private const val MAX_DEPTH = 40
         private const val MAX_NODES = 1500
+        /** Reuse a fresh screenshot instead of hitting the ~1/s takeScreenshot limit. */
+        private const val SCREENSHOT_CACHE_MS = 1000L
 
         fun textOf(n: AccessibilityNodeInfo): String {
             val text = n.text?.toString() ?: return ""

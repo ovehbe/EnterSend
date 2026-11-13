@@ -2,6 +2,7 @@ package com.meowgi.entersend.service
 
 import android.os.Handler
 import android.view.KeyEvent
+import com.meowgi.entersend.core.Box
 import com.meowgi.entersend.core.ChatFieldGuard
 import com.meowgi.entersend.core.CropMatch
 import com.meowgi.entersend.core.Field
@@ -17,7 +18,8 @@ import com.meowgi.entersend.data.Mode
  * Decides what a fresh Enter / Shift+Enter press does. Returns true when the key is consumed.
  * Order: learned node → auto-detect → coordinate tap → pass through. One attempt per press.
  *
- * 0.3.10: optional [diag] records a detailed ring-buffer trace; selection / actions unchanged.
+ * 0.3.10: optional [diag] records a detailed ring-buffer trace.
+ * 0.3.11: crop-gated tap candidates (edge / absolute / proportional) + screenshot retry.
  */
 class EnterHandler(
     private val device: Device,
@@ -163,64 +165,83 @@ class EnterHandler(
             lines += "strategy=tap-spot FAIL no-window-state"
             return finish("passthrough", "tap-spot-no-window", false)
         }
-        val point = TapSpot.resolve(rule, field, ws, ws.density, ws.keyboardShown)
-        lines += "strategy=tap-spot resolve=" +
-            when {
-                point == null -> "null"
-                else -> "(${point.first},${point.second})"
-            } +
-            " anchors dxDp=${rule.tapDxDp} dyDp=${rule.tapDyDp} fx=${rule.tapFx} fy=${rule.tapFy} " +
+        val cands = TapSpot.candidates(rule, field, ws, ws.density, ws.keyboardShown)
+        lines += "strategy=tap-spot candidates=${cands.joinToString { "${it.name}=(${it.point.first},${it.point.second})" }} " +
+            "anchors dxDp=${rule.tapDxDp} dyDp=${rule.tapDyDp} fx=${rule.tapFx} fy=${rule.tapFy} " +
             "abs=${rule.tapX},${rule.tapY} taughtCrop=${rule.cropLeft},${rule.cropTop},${rule.cropRight},${rule.cropBottom}"
-        if (point == null || !TapSpot.isOnScreen(point, ws)) {
-            lines += "  cand#1 tap-spot onScreen=false FAIL"
+        if (cands.isEmpty()) {
+            lines += "  (no on-screen candidates)"
             store.markNeedsRecheck(rule.packageName)
             offerTeach(rule)
-            return finish("passthrough", "tap-spot-offscreen-or-unresolved", false)
+            return finish("passthrough", "tap-spot-no-candidates", false)
         }
         if (crop == null || rule.cropLeft == null) {
-            lines += "  cand#1 tap-spot cropMissing FAIL"
+            lines += "  cropMissing FAIL"
             offerTeach(rule)
             return finish("passthrough", "tap-spot-crop-missing", false)
         }
         val token = Any()
         inFlight = token
-        val rect = TapSpot.cropBox(point.first, point.second, ws)
-        lines += "  cand#1 tap=(${point.first},${point.second}) " +
-            "cropBox=${rect.left},${rect.top},${rect.right},${rect.bottom} (awaiting screenshot)"
-        // Capture is async — append CropMatch + outcome when the callback runs.
-        device.capture(rect) { live ->
-            if (inFlight !== token) return@capture
+        // One full-screen capture, then crop-match each candidate (avoids per-cand rate limits).
+        val fullRect = Box(0, 0, ws.width, ws.height)
+        fun onFull(full: Pixels?, retried: Boolean) {
+            if (inFlight !== token) return
             val extra = mutableListOf<String>()
-            if (live == null) {
-                extra += "  cand#1 ${CropMatch.Score(Double.NaN, -1, false, "live=null", false).line()}"
+            if (full == null) {
+                if (!retried) {
+                    extra += "  screenshot=null → retry once after ${SCREENSHOT_RETRY_MS}ms"
+                    lines += extra
+                    main.postDelayed({
+                        if (inFlight !== token) return@postDelayed
+                        device.capture(fullRect) { again -> onFull(again, retried = true) }
+                    }, SCREENSHOT_RETRY_MS)
+                    return
+                }
+                extra += "  screenshot=null after retry (no imeEnter — avoid false newline)"
                 inFlight = null
                 store.markNeedsRecheck(rule.packageName)
-                device.imeEnter(field)
                 offerTeach(rule)
-                extra += "outcome=imeEnter"
+                extra += "outcome=swallow"
                 extra += "reason=crop-screenshot-null"
                 extra += "consumed=true"
                 diag?.record((lines + extra).joinToString("\n"))
-                return@capture
+                return
             }
-            val scored = CropMatch.score(crop, live)
-            extra += "  cand#1 tap=(${point.first},${point.second}) " +
-                "cropBox=${rect.left},${rect.top},${rect.right},${rect.bottom} ${scored.line()}"
-            if (scored.pass) {
+            var won: TapSpot.Candidate? = null
+            for ((i, cand) in cands.withIndex()) {
+                val n = i + 1
+                val cropRect = TapSpot.cropBox(cand.point.first, cand.point.second, ws)
+                val live = full.crop(cropRect)
+                if (live == null) {
+                    extra += "  cand#$n name=${cand.name} tap=(${cand.point.first},${cand.point.second}) " +
+                        "cropBox=${cropRect.left},${cropRect.top},${cropRect.right},${cropRect.bottom} cropExtract=FAIL"
+                    continue
+                }
+                val scored = CropMatch.score(crop, live)
+                extra += "  cand#$n name=${cand.name} tap=(${cand.point.first},${cand.point.second}) " +
+                    "cropBox=${cropRect.left},${cropRect.top},${cropRect.right},${cropRect.bottom} ${scored.line()}"
+                if (scored.pass) {
+                    won = cand
+                    break
+                }
+            }
+            if (won != null) {
+                val point = won.point
                 android.util.Log.d(
                     "EnterSend",
-                    "gesture screen=(${point.first},${point.second}) saved=(${rule.tapX},${rule.tapY})",
+                    "gesture screen=(${point.first},${point.second}) cand=${won.name} saved=(${rule.tapX},${rule.tapY})",
                 )
                 device.tap(point.first, point.second)
                 if (debug) device.notice(strings(com.meowgi.entersend.R.string.debug_send_tap))
                 verify(field, viaTap = true, token = token)
+                extra += "chosen_candidate=${won.name}"
                 extra += "outcome=dispatchGesture-tap"
                 extra += "reason=tap-spot-crop-pass"
                 extra += "consumed=true"
             } else {
                 inFlight = null
                 store.markNeedsRecheck(rule.packageName)
-                device.imeEnter(field) // key was already consumed; re-deliver as IME Enter
+                device.imeEnter(field)
                 offerTeach(rule)
                 extra += "outcome=imeEnter"
                 extra += "reason=crop-mismatch-fallback"
@@ -228,7 +249,7 @@ class EnterHandler(
             }
             diag?.record((lines + extra).joinToString("\n"))
         }
-        // Sync return matches 0.3.9: consumed while capture is in flight.
+        device.capture(fullRect) { live -> onFull(live, retried = false) }
         onDecision(pkg, ruleLabel, true)
         return true
     }
@@ -305,5 +326,7 @@ class EnterHandler(
     companion object {
         const val VERIFY_MS = 500L
         const val MAX_CONSECUTIVE_FAILURES = 3
+        /** AccessibilityService.takeScreenshot is ~1/s; one short retry before giving up. */
+        const val SCREENSHOT_RETRY_MS = 350L
     }
 }
