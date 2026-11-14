@@ -20,6 +20,7 @@ import com.meowgi.entersend.core.KeyGate
 import com.meowgi.entersend.core.SystemAppPolicy
 import com.meowgi.entersend.data.CropFiles
 import com.meowgi.entersend.data.EnterDiagLog
+import com.meowgi.entersend.data.LastUsed
 import com.meowgi.entersend.data.PromptDecisionLog
 import java.time.LocalDate
 
@@ -301,6 +302,11 @@ class EnterSendService : AccessibilityService() {
         // Prompt path only — never feeds EnterHandler's package selection.
         store?.onForeground(pkg)
         store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule, source = source) }
+        // Home "Last used" card — eligible non-system packages only (no Usage Access required).
+        try {
+            LastUsed.recordForeground(this, pkg, policy ?: SystemAppPolicy(this))
+        } catch (_: Exception) {
+        }
     }
 
     private fun resolveForeground(eventPkg: String?): ForegroundPackage.Resolved? {

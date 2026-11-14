@@ -51,7 +51,11 @@ Bottom navigation:
 2. **Apps** — same PackageManager listing as 0.3.3 (MAIN+LAUNCHER, system-app filter / Show system apps),
    with a blocking loading spinner while the list loads on a background thread, then one main-thread swap.
 3. **Profiles** — save / switch / rename / delete full config snapshots (different keyboard heights).
-4. **Settings** — new-app prompts toggle, Usage Access backup, export/import JSON, open setup, **Diagnostics**, version.
+4. **Settings** — new-app prompts toggle, Usage Access backup, **Exclude from recent**, export/import JSON, open setup, **Diagnostics**, version.
+
+### Last used app (0.3.15)
+
+Home shows a large **Last used app** card for the most recent non-system, non-excluded foreground package tracked by the accessibility service (no Usage Access required). Tap it to open the same per-app sheet as on the Apps page. Settings → **Exclude from recent** lets you hide specific user apps from that card.
 
 Settings changes still apply to the running accessibility service immediately. Teach overlays keep
 the same behavior; only the visuals were polished.

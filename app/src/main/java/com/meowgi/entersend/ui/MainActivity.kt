@@ -15,6 +15,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
@@ -30,6 +31,7 @@ import com.meowgi.entersend.core.SystemAppPolicy
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.ConfigJson
+import com.meowgi.entersend.data.LastUsed
 import com.meowgi.entersend.data.Mode
 import com.meowgi.entersend.data.ProfileStore
 import com.meowgi.entersend.data.PromptPrefs
@@ -117,6 +119,13 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.usage_access_grant).setOnClickListener {
             com.meowgi.entersend.service.UsageForeground.openSettings(this)
         }
+        findViewById<View>(R.id.exclude_from_recent).setOnClickListener {
+            startActivity(Intent(this, ExcludeRecentActivity::class.java))
+        }
+        findViewById<View>(R.id.last_used_card).setOnClickListener {
+            val pkg = LastUsed.current(this, policy) ?: return@setOnClickListener
+            showActionsForPackage(pkg)
+        }
 
         handleTeachIntent(intent)
         search = findViewById(R.id.search)
@@ -180,6 +189,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         refreshStatusUi()
         refreshUsageGrant()
+        refreshLastUsedCard()
         ServiceWatch.updateNotice(this, ServiceWatch.isRunning())
         refreshProfileLabel()
         refreshProfiles()
@@ -274,6 +284,58 @@ class MainActivity : AppCompatActivity() {
         }
         val needGrant = PromptPrefs.usageFallbackEnabled(this) && !granted
         findViewById<View>(R.id.usage_grant).visibility = if (needGrant) View.VISIBLE else View.GONE
+    }
+
+    private fun refreshLastUsedCard() {
+        val card = findViewById<View>(R.id.last_used_card)
+        val empty = findViewById<View>(R.id.last_used_empty)
+        val pkg = LastUsed.current(this, policy)
+        if (pkg == null) {
+            card.visibility = View.GONE
+            empty.visibility = View.VISIBLE
+            return
+        }
+        empty.visibility = View.GONE
+        card.visibility = View.VISIBLE
+        val label = try {
+            val info = packageManager.getApplicationInfo(pkg, 0)
+            info.loadLabel(packageManager).toString()
+        } catch (_: PackageManager.NameNotFoundException) {
+            pkg
+        }
+        val icon = try {
+            packageManager.getApplicationIcon(pkg)
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+        findViewById<TextView>(R.id.last_used_label).text = label
+        findViewById<ImageView>(R.id.last_used_icon).setImageDrawable(icon)
+        card.contentDescription = getString(R.string.last_used_cd, label)
+    }
+
+    /**
+     * Same per-app sheet as tapping a row on the Apps page. Reuses [showActions] with no
+     * behavior change — loads the row from cache or a background [AppRows.load] if needed.
+     */
+    private fun showActionsForPackage(pkg: String) {
+        fun present(list: List<AppRow>) {
+            val row = list.firstOrNull { it.pkg == pkg }
+            if (row != null) showActions(row)
+            else Toast.makeText(this, R.string.cannot_open_app, Toast.LENGTH_SHORT).show()
+        }
+        val cached = rows
+        if (cached != null) {
+            present(cached)
+            return
+        }
+        app.io.execute {
+            val loaded = AppRows.load(this, app.db.rules().all(), policy)
+            runOnUiThread {
+                rows = loaded
+                applyFilter()
+                present(loaded)
+            }
+        }
     }
 
     private fun refreshProfileLabel() {

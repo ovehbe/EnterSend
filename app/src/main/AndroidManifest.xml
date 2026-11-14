@@ -49,6 +49,12 @@
             android:exported="false"
             android:label="@string/diagnostics_title" />
 
+        <activity
+            android:name=".ui.ExcludeRecentActivity"
+            android:exported="false"
+            android:label="@string/exclude_from_recent"
+            android:parentActivityName=".ui.MainActivity" />
+
         <service
             android:name=".service.EnterSendService"
             android:exported="false"

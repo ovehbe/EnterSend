@@ -101,6 +101,12 @@
     <string name="home_title">Status</string>
     <string name="home_subtitle">Enter sends in chat. Shift+Enter starts a new line.</string>
     <string name="home_manage_apps">Manage apps</string>
+    <string name="last_used_title">Last used app</string>
+    <string name="last_used_empty">No recent app yet. Open a chat app with EnterSend on.</string>
+    <string name="last_used_cd">Last used app: %1$s. Opens app settings.</string>
+    <string name="exclude_from_recent">Exclude from recent</string>
+    <string name="exclude_from_recent_blurb">Checked apps never appear on the Home last-used card.</string>
+    <string name="exclude_from_recent_empty">No user apps installed.</string>
     <string name="status_on_title">EnterSend is on</string>
     <string name="status_on_body">Physical Enter will send in taught and auto-detected chat apps.</string>
     <string name="status_off_title">EnterSend is off</string>
