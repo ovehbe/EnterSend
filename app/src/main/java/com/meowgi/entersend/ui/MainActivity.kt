@@ -35,6 +35,8 @@ import com.meowgi.entersend.data.LastUsed
 import com.meowgi.entersend.data.Mode
 import com.meowgi.entersend.data.ProfileStore
 import com.meowgi.entersend.data.PromptPrefs
+import com.meowgi.entersend.diag.DiagLog
+import com.meowgi.entersend.diag.DiagShare
 import com.meowgi.entersend.service.EnterSendService
 import java.io.File
 
@@ -83,11 +85,23 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.open_diagnostics).setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
+        findViewById<View>(R.id.share_diag_logs).setOnClickListener {
+            try {
+                DiagShare.share(this)
+            } catch (e: Exception) {
+                Toast.makeText(this, getString(R.string.export_failed, e.message ?: "share"), Toast.LENGTH_SHORT).show()
+            }
+        }
+        findViewById<View>(R.id.clear_diag_logs).setOnClickListener {
+            DiagShare.clearAll(this)
+            Toast.makeText(this, R.string.diag_logs_cleared, Toast.LENGTH_SHORT).show()
+        }
         findViewById<View>(R.id.share_enter_log).setOnClickListener { shareEnterLog() }
         findViewById<View>(R.id.clear_enter_log).setOnClickListener {
             com.meowgi.entersend.data.EnterDiagLog.get(this).clear()
             Toast.makeText(this, R.string.enter_log_cleared, Toast.LENGTH_SHORT).show()
         }
+        DiagLog.i("ui", "MainActivity.onCreate")
         findViewById<View>(R.id.home_goto_apps).setOnClickListener { selectTab(1) }
         findViewById<View>(R.id.status_action).setOnClickListener { ServiceWatch.openAccessibilitySettings(this) }
         findViewById<View>(R.id.profiles_button).setOnClickListener { selectTab(2) }
@@ -187,6 +201,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        DiagLog.i("ui", "MainActivity.onResume")
         refreshStatusUi()
         refreshUsageGrant()
         refreshLastUsedCard()
@@ -194,6 +209,16 @@ class MainActivity : AppCompatActivity() {
         refreshProfileLabel()
         refreshProfiles()
         reload()
+    }
+
+    override fun onPause() {
+        DiagLog.i("ui", "MainActivity.onPause")
+        super.onPause()
+    }
+
+    override fun onStop() {
+        DiagLog.i("ui", "MainActivity.onStop")
+        super.onStop()
     }
 
 
@@ -293,6 +318,7 @@ class MainActivity : AppCompatActivity() {
         if (pkg == null) {
             card.visibility = View.GONE
             empty.visibility = View.VISIBLE
+            DiagLog.i("lastused", "card empty")
             return
         }
         empty.visibility = View.GONE
@@ -311,6 +337,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.last_used_label).text = label
         findViewById<ImageView>(R.id.last_used_icon).setImageDrawable(icon)
         card.contentDescription = getString(R.string.last_used_cd, label)
+        DiagLog.i("lastused", "card pkg=$pkg label=$label")
     }
 
     /**
@@ -354,8 +381,18 @@ class MainActivity : AppCompatActivity() {
      */
     private fun reload(toastWhenDone: Boolean = false) {
         setAppsLoading(true)
+        val t0 = System.currentTimeMillis()
         app.io.execute {
-            val loaded = AppRows.load(this, app.db.rules().all(), policy)
+            val rulesT0 = System.currentTimeMillis()
+            val rules = app.db.rules().all()
+            val rulesMs = System.currentTimeMillis() - rulesT0
+            val scanT0 = System.currentTimeMillis()
+            val loaded = AppRows.load(this, rules, policy)
+            val scanMs = System.currentTimeMillis() - scanT0
+            DiagLog.i(
+                "apps",
+                "load count=${loaded.size} rulesMs=$rulesMs scanMs=$scanMs totalMs=${System.currentTimeMillis() - t0}",
+            )
             runOnUiThread {
                 rows = loaded
                 applyFilter()

@@ -136,6 +136,11 @@
     <string name="action_enable_default_enter">Enable with default Enter</string>
     <string name="action_ask_again">Ask again on open</string>
     <string name="diagnostics_open">Diagnostics</string>
+    <string name="diagnostics_section">Diagnostics</string>
+    <string name="share_diag_logs">Share logs</string>
+    <string name="clear_diag_logs">Clear logs</string>
+    <string name="diag_logs_cleared">Diagnostic logs cleared</string>
+    <string name="diag_logs_subject">EnterSend diagnostic logs</string>
     <string name="diagnostics_title">Prompt log</string>
     <string name="diagnostics_blurb">Last ~100 prompt and Enter decisions. Copy or share this if a teach prompt is missing or Enter does not send.</string>
     <string name="diagnostics_copy">Copy</string>

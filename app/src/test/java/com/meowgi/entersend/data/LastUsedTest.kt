@@ -171,8 +171,8 @@ class LastUsedTest {
         assertEquals("com.whatsapp", LastUsedPrefs.lastPackage(app))
     }
 
-    @Test fun versionIs0316() {
-        assertEquals("0.3.16", BuildConfig.VERSION_NAME)
-        assertEquals(23, BuildConfig.VERSION_CODE)
+    @Test fun versionIs0317() {
+        assertEquals("0.3.17", BuildConfig.VERSION_NAME)
+        assertEquals(24, BuildConfig.VERSION_CODE)
     }
 }

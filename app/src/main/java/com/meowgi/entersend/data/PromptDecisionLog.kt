@@ -34,6 +34,11 @@ class PromptDecisionLog private constructor(private val file: File) {
             while (entries.size > MAX) entries.removeFirst()
             saveLocked()
         }
+        // Mirror into rolling DiagLog (log-only; never affects prompt behavior).
+        try {
+            com.meowgi.entersend.diag.DiagLog.i("prompt", "$pkg [$source] $decision")
+        } catch (_: Exception) {
+        }
     }
 
     fun snapshot(): List<Entry> = synchronized(lock) { entries.toList() }
