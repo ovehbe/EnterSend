@@ -269,8 +269,8 @@ class Prompt031FixTest {
         assertTrue(text.contains("prompted:notification"))
         assertNotNull(a.findViewById(R.id.diag_copy))
         assertNotNull(a.findViewById(R.id.diag_share))
-        assertEquals(24, BuildConfig.VERSION_CODE)
-        assertEquals("0.3.17", BuildConfig.VERSION_NAME)
+        assertEquals(25, BuildConfig.VERSION_CODE)
+        assertEquals("0.3.18", BuildConfig.VERSION_NAME)
     }
 
     private fun installLauncher(pkg: String) {

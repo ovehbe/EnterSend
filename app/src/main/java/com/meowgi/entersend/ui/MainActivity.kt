@@ -21,6 +21,7 @@ import android.widget.TextView
 import android.widget.Toast
 import android.widget.ViewFlipper
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.button.MaterialButton
 import com.meowgi.entersend.BuildConfig
@@ -39,6 +40,7 @@ import com.meowgi.entersend.diag.DiagLog
 import com.meowgi.entersend.diag.DiagShare
 import com.meowgi.entersend.service.EnterSendService
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Material 3 shell: Home status, Apps list, Profiles, Settings.
@@ -60,6 +62,8 @@ class MainActivity : AppCompatActivity() {
     private var rows: List<AppRow>? = null
     private var exportAllProfiles = true
     private val policy by lazy { SystemAppPolicy(this) }
+    /** Bumped in [onStop] so late async UI posts drop instead of showing dialogs. */
+    private val uiGeneration = AtomicInteger(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -217,8 +221,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
-        DiagLog.i("ui", "MainActivity.onStop")
+        uiGeneration.incrementAndGet()
+        DiagLog.i("ui", "MainActivity.onStop gen=${uiGeneration.get()}")
         super.onStop()
+    }
+
+    /** True when it is safe to show dialogs / sheets (avoids BadTokenException). */
+    private fun canShowUi(): Boolean {
+        if (isFinishing) return false
+        if (Build.VERSION.SDK_INT >= 17 && isDestroyed) return false
+        return lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
     }
 
 
@@ -279,9 +291,15 @@ class MainActivity : AppCompatActivity() {
             // Fallback when the accessibility overlay chooser can't be shown.
             selectTab(1)
             setAppsLoading(true)
+            val gen = uiGeneration.get()
             app.io.execute {
                 val loaded = AppRows.load(this, app.db.rules().all(), policy)
                 runOnUiThread {
+                    if (gen != uiGeneration.get() || !canShowUi()) {
+                        DiagLog.w("ui", "drop stale teach-intent sheet pkg=$pkg")
+                        setAppsLoading(false)
+                        return@runOnUiThread
+                    }
                     rows = loaded
                     applyFilter()
                     setAppsLoading(false)
@@ -341,26 +359,46 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Same per-app sheet as tapping a row on the Apps page. Reuses [showActions] with no
-     * behavior change — loads the row from cache or a background [AppRows.load] if needed.
+     * Same per-app sheet as tapping a row on the Apps page. Reuses [showActions].
+     * Uses the cached Apps list when available; otherwise builds a single [AppRow] (no full scan).
      */
     private fun showActionsForPackage(pkg: String) {
-        fun present(list: List<AppRow>) {
-            val row = list.firstOrNull { it.pkg == pkg }
-            if (row != null) showActions(row)
-            else Toast.makeText(this, R.string.cannot_open_app, Toast.LENGTH_SHORT).show()
+        val t0 = System.currentTimeMillis()
+        DiagLog.i("lastused", "card tap start pkg=$pkg")
+        fun present(row: AppRow?) {
+            if (!canShowUi()) {
+                DiagLog.w("ui", "skip present sheet pkg=$pkg (activity not started)")
+                return
+            }
+            if (row != null) {
+                showActions(row)
+                DiagLog.i("lastused", "sheet shown pkg=$pkg ms=${System.currentTimeMillis() - t0}")
+            } else {
+                Toast.makeText(this, R.string.cannot_open_app, Toast.LENGTH_SHORT).show()
+                DiagLog.w("lastused", "sheet missing pkg=$pkg ms=${System.currentTimeMillis() - t0}")
+            }
         }
-        val cached = rows
+        val cached = rows?.firstOrNull { it.pkg == pkg }
         if (cached != null) {
             present(cached)
             return
         }
+        if (rows != null) {
+            // Full list loaded but package absent.
+            present(null)
+            return
+        }
+        val gen = uiGeneration.get()
         app.io.execute {
-            val loaded = AppRows.load(this, app.db.rules().all(), policy)
+            val fromStore = EnterSendService.instance?.store?.get(pkg)?.rule
+            val rule = fromStore ?: app.db.rules().get(pkg) ?: AppRule(pkg)
+            val row = AppRows.loadOne(this, pkg, rule, policy)
             runOnUiThread {
-                rows = loaded
-                applyFilter()
-                present(loaded)
+                if (gen != uiGeneration.get() || !canShowUi()) {
+                    DiagLog.w("ui", "drop stale card sheet pkg=$pkg gen=$gen now=${uiGeneration.get()}")
+                    return@runOnUiThread
+                }
+                present(row)
             }
         }
     }
@@ -423,6 +461,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showActions(row: AppRow) {
+        if (!canShowUi()) {
+            DiagLog.w("ui", "skip showActions pkg=${row.pkg} (activity not started)")
+            return
+        }
         if (row.blocked) {
             AlertDialog.Builder(this)
                 .setTitle(row.label)

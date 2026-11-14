@@ -18,6 +18,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -25,7 +26,10 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.android.controller.ActivityController
 import org.robolectric.shadows.ShadowAlertDialog
+import java.lang.reflect.Field
+import java.lang.reflect.Method
 
 @RunWith(RobolectricTestRunner::class)
 class LastUsedCardTest {
@@ -37,12 +41,29 @@ class LastUsedCardTest {
         MainActivity.prefs(app).edit().putBoolean(MainActivity.KEY_SETUP_DONE, true).apply()
         LastUsedPrefs.setLastPackage(app, null)
         LastUsedPrefs.setExcluded(app, emptySet())
+        AppRows.fullLoadCountForTests = 0
     }
 
     @After fun tearDown() {
         LastUsedPrefs.setLastPackage(app, null)
         LastUsedPrefs.setExcluded(app, emptySet())
+        AppRows.fullLoadCountForTests = 0
         app.db.close()
+    }
+
+    private fun rowsField(): Field =
+        MainActivity::class.java.getDeclaredField("rows").apply { isAccessible = true }
+
+    private fun showActionsForPackage(a: MainActivity, pkg: String) {
+        val m: Method = MainActivity::class.java.getDeclaredMethod("showActionsForPackage", String::class.java)
+        m.isAccessible = true
+        m.invoke(a, pkg)
+    }
+
+    private fun showActions(a: MainActivity, row: AppRow) {
+        val m: Method = MainActivity::class.java.getDeclaredMethod("showActions", AppRow::class.java)
+        m.isAccessible = true
+        m.invoke(a, row)
     }
 
     private fun install(pkg: String, label: String) {
@@ -115,6 +136,53 @@ class LastUsedCardTest {
         list.performItemClick(list.getChildAt(whatsIdx) ?: list, whatsIdx, 0)
         assertTrue(LastUsedPrefs.isExcluded(app, "com.whatsapp"))
         assertFalse(LastUsedPrefs.isExcluded(app, "org.telegram.messenger"))
+    }
+
+    @Test fun cardTapWithNullRowsOpensSheetWithoutFullLoad() {
+        LastUsedPrefs.setLastPackage(app, "com.whatsapp")
+        val a = open()
+        settle()
+        // Simulate the race: Home visible but Apps list not cached yet.
+        rowsField().set(a, null)
+        val loadsBefore = AppRows.fullLoadCountForTests
+        ShadowAlertDialog.reset()
+
+        a.findViewById<View>(R.id.last_used_card).performClick()
+        settle()
+
+        assertEquals(
+            "card tap must not trigger AppRows.load",
+            loadsBefore,
+            AppRows.fullLoadCountForTests,
+        )
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertNotNull(dialog)
+        assertEquals("WhatsApp", shadowOf(dialog).title.toString())
+    }
+
+    @Test fun showActionsAfterOnStopDoesNotCrashOrShowDialog() {
+        LastUsedPrefs.setLastPackage(app, "com.whatsapp")
+        val controller: ActivityController<MainActivity> =
+            Robolectric.buildActivity(MainActivity::class.java).setup().visible()
+        val a = controller.get()
+        settle()
+        val row = AppRows.loadOne(app, "com.whatsapp")!!
+        ShadowAlertDialog.reset()
+        controller.pause().stop()
+        settle()
+
+        // Must not throw BadTokenException / WindowManager crash.
+        showActions(a, row)
+        settle()
+        assertNull(ShadowAlertDialog.getLatestAlertDialog())
+
+        // Stale async card path after stop also drops.
+        rowsField().set(a, null)
+        val loadsBefore = AppRows.fullLoadCountForTests
+        showActionsForPackage(a, "com.whatsapp")
+        settle()
+        assertEquals(loadsBefore, AppRows.fullLoadCountForTests)
+        assertNull(ShadowAlertDialog.getLatestAlertDialog())
     }
 
     @Test fun excludeSearchFiltersAndSavesCorrectPackageWhileFiltered() {
