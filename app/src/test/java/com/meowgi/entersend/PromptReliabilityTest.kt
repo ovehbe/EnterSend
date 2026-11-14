@@ -172,13 +172,61 @@ class PromptReliabilityTest {
     }
 
     @Config(sdk = [29])
+    @Test fun notificationActionsAreTeachDontAskAndOff() {
+        installLauncher("com.example.chat")
+        val store = RuleStore(db.rules(), direct, direct, crops)
+        val notifier = NewAppNotifier(context(), store, { day }, SystemAppPolicy(context()), { now })
+        assertTrue(notifier.postNotification("com.example.chat", "Chat"))
+        val posted = shadowOf(context().getSystemService(NotificationManager::class.java))
+            .getNotification(NewAppNotifier.TAG, NewAppNotifier.notificationId("com.example.chat"))
+        assertNotNull(posted)
+        val titles = posted!!.actions.map { it.title.toString() }
+        assertEquals(
+            listOf(
+                context().getString(com.meowgi.entersend.R.string.action_teach),
+                context().getString(com.meowgi.entersend.R.string.action_dont_ask),
+                context().getString(com.meowgi.entersend.R.string.action_off_for_app),
+            ),
+            titles,
+        )
+        assertFalse(titles.any { it == context().getString(com.meowgi.entersend.R.string.action_remind_later) })
+    }
+
+    @Config(sdk = [29])
+    @Test fun notificationDontAskRecordsSameDecisionAsPopup() {
+        installLauncher("com.example.chat")
+        val store = RuleStore(db.rules(), direct, direct, crops)
+        val service = Robolectric.setupService(EnterSendService::class.java)
+        service.attach(FakeDevice(), store, FakeOverlay())
+        EnterSendService.setInstanceForTests(service)
+
+        NotifyActionReceiver().onReceive(
+            context(),
+            Intent(NotifyActionReceiver.ACTION_DONT_ASK)
+                .putExtra(NotifyActionReceiver.EXTRA_PACKAGE, "com.example.chat"),
+        )
+        assertTrue(store.get("com.example.chat")!!.rule.teachDeclined)
+        assertFalse(
+            NewAppNotifier(context(), store, { day }, SystemAppPolicy(context()), { now })
+                .shouldPrompt("com.example.chat", store.get("com.example.chat")!!.rule),
+        )
+        // Undo path (Ask again) still clears the same flag.
+        store.clearDeclined("com.example.chat")
+        assertFalse(store.get("com.example.chat")!!.rule.teachDeclined)
+        assertTrue(
+            NewAppNotifier(context(), store, { day }, SystemAppPolicy(context()), { now })
+                .shouldPrompt("com.example.chat", store.get("com.example.chat")!!.rule),
+        )
+    }
+
+    @Config(sdk = [29])
     @Test fun popupActionsPersistLiveState() {
         installLauncher("com.example.chat")
         val store = RuleStore(db.rules(), direct, direct, crops)
         val service = Robolectric.setupService(EnterSendService::class.java)
         service.attach(FakeDevice(), store, FakeOverlay())
 
-        // Snooze via notification action.
+        // Snooze path still works (popup Remind me later uses PromptPrefs; ACTION_LATER kept for that).
         NotifyActionReceiver().onReceive(
             context(),
             Intent(NotifyActionReceiver.ACTION_LATER).putExtra(NotifyActionReceiver.EXTRA_PACKAGE, "com.example.chat"),

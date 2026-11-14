@@ -172,6 +172,65 @@
                         android:text="@string/setting_usage_grant" />
                 </LinearLayout>
 
+                <!-- Last used app: large tap target; opens the same Apps sheet for that package. -->
+                <LinearLayout
+                    android:id="@+id/last_used_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/status_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="@drawable/focus_ring"
+                    android:gravity="center_vertical"
+                    android:minHeight="112dp"
+                    android:orientation="horizontal"
+                    android:padding="20dp">
+
+                    <ImageView
+                        android:id="@+id/last_used_icon"
+                        android:layout_width="72dp"
+                        android:layout_height="72dp"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:scaleType="fitCenter" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/last_used_heading"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/last_used_title"
+                            android:textAppearance="@style/TextAppearance.EnterSend.Section" />
+
+                        <TextView
+                            android:id="@+id/last_used_label"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                            android:textColor="?attr/colorOnSurface" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/last_used_empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/status_card_bg"
+                    android:padding="20dp"
+                    android:text="@string/last_used_empty"
+                    android:textAppearance="?attr/textAppearanceBodyLarge"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:visibility="gone" />
+
                 <TextView
                     android:id="@+id/profile_label"
                     android:layout_width="match_parent"
@@ -461,6 +520,15 @@
                     android:visibility="gone" />
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/exclude_from_recent"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/exclude_from_recent" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/export_button"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -483,6 +551,14 @@
                     android:foreground="@drawable/focus_ring"
                     android:text="@string/open_setup" />
 
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="4dp"
+                    android:text="@string/diagnostics_section"
+                    android:textAppearance="@style/TextAppearance.EnterSend.Section" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/open_diagnostics"
                     style="@style/Widget.Material3.Button.TextButton"
@@ -490,6 +566,22 @@
                     android:layout_height="wrap_content"
                     android:foreground="@drawable/focus_ring"
                     android:text="@string/diagnostics_open" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/share_diag_logs"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/share_diag_logs" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/clear_diag_logs"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:foreground="@drawable/focus_ring"
+                    android:text="@string/clear_diag_logs" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/share_enter_log"

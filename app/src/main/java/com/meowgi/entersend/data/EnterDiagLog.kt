@@ -26,6 +26,12 @@ class EnterDiagLog private constructor(private val file: File) {
             while (entries.size > MAX) entries.removeFirst()
             saveLocked()
         }
+        // Mirror a short summary into rolling DiagLog (log-only).
+        try {
+            val summary = block.lineSequence().firstOrNull().orEmpty().take(240)
+            com.meowgi.entersend.diag.DiagLog.i("enter", summary)
+        } catch (_: Exception) {
+        }
     }
 
     fun snapshot(): List<String> = synchronized(lock) { entries.toList() }

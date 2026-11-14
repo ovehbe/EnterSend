@@ -144,7 +144,8 @@ class NewAppNotifier(
         ensureChannel()
         val open = promptPending(pkg, requestCode(pkg, 0))
         val teach = action(pkg, NotifyActionReceiver.ACTION_TEACH, requestCode(pkg, 1))
-        val later = action(pkg, NotifyActionReceiver.ACTION_LATER, requestCode(pkg, 2))
+        // 0.3.18: heads-up uses Don't ask again (popup still has Remind me later).
+        val dontAsk = action(pkg, NotifyActionReceiver.ACTION_DONT_ASK, requestCode(pkg, 2))
         val off = action(pkg, NotifyActionReceiver.ACTION_OFF, requestCode(pkg, 3))
         val notification = Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
@@ -155,7 +156,7 @@ class NewAppNotifier(
             .setCategory(Notification.CATEGORY_RECOMMENDATION)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .addAction(Notification.Action.Builder(null, context.getString(R.string.action_teach), teach).build())
-            .addAction(Notification.Action.Builder(null, context.getString(R.string.action_remind_later), later).build())
+            .addAction(Notification.Action.Builder(null, context.getString(R.string.action_dont_ask), dontAsk).build())
             .addAction(Notification.Action.Builder(null, context.getString(R.string.action_off_for_app), off).build())
             .build()
         return try {

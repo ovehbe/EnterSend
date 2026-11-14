@@ -49,6 +49,12 @@
             android:exported="false"
             android:label="@string/diagnostics_title" />
 
+        <activity
+            android:name=".ui.ExcludeRecentActivity"
+            android:exported="false"
+            android:label="@string/exclude_from_recent"
+            android:parentActivityName=".ui.MainActivity" />
+
         <service
             android:name=".service.EnterSendService"
             android:exported="false"
@@ -70,6 +76,16 @@
         <receiver
             android:name=".service.NotifyActionReceiver"
             android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.diagfileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

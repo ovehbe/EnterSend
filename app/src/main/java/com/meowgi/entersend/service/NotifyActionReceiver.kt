@@ -38,6 +38,17 @@ class NotifyActionReceiver : BroadcastReceiver() {
                     System.currentTimeMillis() + PromptPrefs.SNOOZE_MS,
                 )
             }
+            ACTION_DONT_ASK -> {
+                // Same as the popup "Don't ask again" button (RuleStore.decline / setDeclined).
+                if (service?.store != null) {
+                    service.store!!.decline(pkg)
+                } else {
+                    app.io.execute {
+                        app.db.rules().ensure(pkg)
+                        app.db.rules().setDeclined(pkg)
+                    }
+                }
+            }
             ACTION_TEACH -> {
                 if (service?.teach != null) {
                     service.teach!!.startTeaching(pkg)
@@ -58,6 +69,8 @@ class NotifyActionReceiver : BroadcastReceiver() {
         const val ACTION_TEACH = "com.meowgi.entersend.action.TEACH"
         const val ACTION_OFF = "com.meowgi.entersend.action.OFF"
         const val ACTION_LATER = "com.meowgi.entersend.action.LATER"
+        /** Notification button: same decision as the popup Don't-ask-again choice. */
+        const val ACTION_DONT_ASK = "com.meowgi.entersend.action.DONT_ASK"
         const val ACTION_OPEN = "com.meowgi.entersend.action.OPEN"
         const val EXTRA_PACKAGE = "package"
         const val EXTRA_SHOW_ACTIONS = "show_actions"

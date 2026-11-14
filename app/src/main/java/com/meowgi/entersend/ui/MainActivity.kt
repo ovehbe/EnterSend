@@ -15,11 +15,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.ViewFlipper
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.button.MaterialButton
 import com.meowgi.entersend.BuildConfig
@@ -30,11 +32,15 @@ import com.meowgi.entersend.core.SystemAppPolicy
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.ConfigJson
+import com.meowgi.entersend.data.LastUsed
 import com.meowgi.entersend.data.Mode
 import com.meowgi.entersend.data.ProfileStore
 import com.meowgi.entersend.data.PromptPrefs
+import com.meowgi.entersend.diag.DiagLog
+import com.meowgi.entersend.diag.DiagShare
 import com.meowgi.entersend.service.EnterSendService
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Material 3 shell: Home status, Apps list, Profiles, Settings.
@@ -56,6 +62,11 @@ class MainActivity : AppCompatActivity() {
     private var rows: List<AppRow>? = null
     private var exportAllProfiles = true
     private val policy by lazy { SystemAppPolicy(this) }
+    /** Bumped in [onStop] so late async UI posts drop instead of showing dialogs. */
+    private val uiGeneration = AtomicInteger(0)
+    /** Prefetched last-used [AppRow] so card tap can open the sheet synchronously. */
+    private var lastUsedPrefetch: AppRow? = null
+    private var lastUsedPrefetchPkg: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,11 +92,23 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.open_diagnostics).setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
+        findViewById<View>(R.id.share_diag_logs).setOnClickListener {
+            try {
+                DiagShare.share(this)
+            } catch (e: Exception) {
+                Toast.makeText(this, getString(R.string.export_failed, e.message ?: "share"), Toast.LENGTH_SHORT).show()
+            }
+        }
+        findViewById<View>(R.id.clear_diag_logs).setOnClickListener {
+            DiagShare.clearAll(this)
+            Toast.makeText(this, R.string.diag_logs_cleared, Toast.LENGTH_SHORT).show()
+        }
         findViewById<View>(R.id.share_enter_log).setOnClickListener { shareEnterLog() }
         findViewById<View>(R.id.clear_enter_log).setOnClickListener {
             com.meowgi.entersend.data.EnterDiagLog.get(this).clear()
             Toast.makeText(this, R.string.enter_log_cleared, Toast.LENGTH_SHORT).show()
         }
+        DiagLog.i("ui", "MainActivity.onCreate")
         findViewById<View>(R.id.home_goto_apps).setOnClickListener { selectTab(1) }
         findViewById<View>(R.id.status_action).setOnClickListener { ServiceWatch.openAccessibilitySettings(this) }
         findViewById<View>(R.id.profiles_button).setOnClickListener { selectTab(2) }
@@ -116,6 +139,13 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.usage_access_grant).setOnClickListener {
             com.meowgi.entersend.service.UsageForeground.openSettings(this)
+        }
+        findViewById<View>(R.id.exclude_from_recent).setOnClickListener {
+            startActivity(Intent(this, ExcludeRecentActivity::class.java))
+        }
+        findViewById<View>(R.id.last_used_card).setOnClickListener {
+            val pkg = LastUsed.current(this, policy) ?: return@setOnClickListener
+            showActionsForPackage(pkg)
         }
 
         handleTeachIntent(intent)
@@ -178,12 +208,32 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        DiagLog.i("ui", "MainActivity.onResume")
         refreshStatusUi()
         refreshUsageGrant()
+        refreshLastUsedCard()
         ServiceWatch.updateNotice(this, ServiceWatch.isRunning())
         refreshProfileLabel()
         refreshProfiles()
         reload()
+    }
+
+    override fun onPause() {
+        DiagLog.i("ui", "MainActivity.onPause")
+        super.onPause()
+    }
+
+    override fun onStop() {
+        uiGeneration.incrementAndGet()
+        DiagLog.i("ui", "MainActivity.onStop gen=${uiGeneration.get()}")
+        super.onStop()
+    }
+
+    /** True when it is safe to show dialogs / sheets (avoids BadTokenException). */
+    private fun canShowUi(): Boolean {
+        if (isFinishing) return false
+        if (Build.VERSION.SDK_INT >= 17 && isDestroyed) return false
+        return lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
     }
 
 
@@ -244,9 +294,15 @@ class MainActivity : AppCompatActivity() {
             // Fallback when the accessibility overlay chooser can't be shown.
             selectTab(1)
             setAppsLoading(true)
+            val gen = uiGeneration.get()
             app.io.execute {
                 val loaded = AppRows.load(this, app.db.rules().all(), policy)
                 runOnUiThread {
+                    if (gen != uiGeneration.get() || !canShowUi()) {
+                        DiagLog.w("ui", "drop stale teach-intent sheet pkg=$pkg")
+                        setAppsLoading(false)
+                        return@runOnUiThread
+                    }
                     rows = loaded
                     applyFilter()
                     setAppsLoading(false)
@@ -276,6 +332,125 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.usage_grant).visibility = if (needGrant) View.VISIBLE else View.GONE
     }
 
+    private fun refreshLastUsedCard() {
+        val card = findViewById<View>(R.id.last_used_card)
+        val empty = findViewById<View>(R.id.last_used_empty)
+        val pkg = LastUsed.current(this, policy)
+        if (pkg == null) {
+            card.visibility = View.GONE
+            empty.visibility = View.VISIBLE
+            lastUsedPrefetch = null
+            lastUsedPrefetchPkg = null
+            DiagLog.i("lastused", "card empty")
+            return
+        }
+        empty.visibility = View.GONE
+        card.visibility = View.VISIBLE
+        val label = try {
+            val info = packageManager.getApplicationInfo(pkg, 0)
+            info.loadLabel(packageManager).toString()
+        } catch (_: PackageManager.NameNotFoundException) {
+            pkg
+        }
+        val icon = try {
+            packageManager.getApplicationIcon(pkg)
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+        findViewById<TextView>(R.id.last_used_label).text = label
+        findViewById<ImageView>(R.id.last_used_icon).setImageDrawable(icon)
+        card.contentDescription = getString(R.string.last_used_cd, label)
+        DiagLog.i("lastused", "card pkg=$pkg label=$label")
+        prefetchLastUsedRow(pkg)
+    }
+
+    /** Warm [lastUsedPrefetch] so the next card tap can open the sheet with no wait. */
+    private fun prefetchLastUsedRow(pkg: String) {
+        rows?.firstOrNull { it.pkg == pkg }?.let {
+            lastUsedPrefetch = it
+            lastUsedPrefetchPkg = pkg
+            DiagLog.i("lastused", "prefetch from rows pkg=$pkg")
+            return
+        }
+        if (lastUsedPrefetchPkg == pkg && lastUsedPrefetch != null) return
+        lastUsedPrefetchPkg = pkg
+        val gen = uiGeneration.get()
+        // Never use app.io — full AppRows.load on that queue would delay the card sheet.
+        app.quick.execute {
+            val row = loadOneRow(pkg)
+            runOnUiThread {
+                if (gen != uiGeneration.get()) return@runOnUiThread
+                if (lastUsedPrefetchPkg != pkg) return@runOnUiThread
+                lastUsedPrefetch = row
+                DiagLog.i("lastused", "prefetch ready pkg=$pkg hit=${row != null}")
+            }
+        }
+    }
+
+    /**
+     * Single-package row for the card. Uses RuleStore memory when live; does **not** hit Room
+     * on [EnterSendApp.quick] (avoids blocking behind / contending with [EnterSendApp.io] DB work).
+     * Prefetch is refreshed from [rows] once the full Apps load completes.
+     */
+    private fun loadOneRow(pkg: String): AppRow? {
+        val rule = EnterSendService.instance?.store?.get(pkg)?.rule ?: AppRule(pkg)
+        return AppRows.loadOne(this, pkg, rule, policy)
+    }
+
+    /**
+     * Same per-app sheet as tapping a row on the Apps page. Reuses [showActions].
+     * Prefers the prefetched / rows-cached [AppRow] for an instant sheet; otherwise a
+     * single-package load on [EnterSendApp.quick] (never behind the full Apps scan).
+     */
+    private fun showActionsForPackage(pkg: String) {
+        val t0 = System.currentTimeMillis()
+        DiagLog.i("lastused", "card tap start pkg=$pkg")
+        fun present(row: AppRow?) {
+            if (!canShowUi()) {
+                DiagLog.w("ui", "skip present sheet pkg=$pkg (activity not started)")
+                return
+            }
+            if (row != null) {
+                showActions(row)
+                DiagLog.i("lastused", "sheet shown pkg=$pkg ms=${System.currentTimeMillis() - t0}")
+            } else {
+                Toast.makeText(this, R.string.cannot_open_app, Toast.LENGTH_SHORT).show()
+                DiagLog.w("lastused", "sheet missing pkg=$pkg ms=${System.currentTimeMillis() - t0}")
+            }
+        }
+        lastUsedPrefetch?.takeIf { it.pkg == pkg }?.let {
+            present(it)
+            return
+        }
+        val cached = rows?.firstOrNull { it.pkg == pkg }
+        if (cached != null) {
+            lastUsedPrefetch = cached
+            lastUsedPrefetchPkg = pkg
+            present(cached)
+            return
+        }
+        if (rows != null) {
+            // Full list loaded but package absent.
+            present(null)
+            return
+        }
+        val gen = uiGeneration.get()
+        app.quick.execute {
+            val row = loadOneRow(pkg)
+            runOnUiThread {
+                if (gen != uiGeneration.get() || !canShowUi()) {
+                    DiagLog.w("ui", "drop stale card sheet pkg=$pkg gen=$gen now=${uiGeneration.get()}")
+                    return@runOnUiThread
+                }
+                if (row != null) {
+                    lastUsedPrefetch = row
+                    lastUsedPrefetchPkg = pkg
+                }
+                present(row)
+            }
+        }
+    }
+
     private fun refreshProfileLabel() {
         profileLabel.text = getString(R.string.profile_active, profiles.activeName())
     }
@@ -292,11 +467,26 @@ class MainActivity : AppCompatActivity() {
      */
     private fun reload(toastWhenDone: Boolean = false) {
         setAppsLoading(true)
+        val t0 = System.currentTimeMillis()
         app.io.execute {
-            val loaded = AppRows.load(this, app.db.rules().all(), policy)
+            val rulesT0 = System.currentTimeMillis()
+            val rules = app.db.rules().all()
+            val rulesMs = System.currentTimeMillis() - rulesT0
+            val scanT0 = System.currentTimeMillis()
+            val loaded = AppRows.load(this, rules, policy)
+            val scanMs = System.currentTimeMillis() - scanT0
+            DiagLog.i(
+                "apps",
+                "load count=${loaded.size} rulesMs=$rulesMs scanMs=$scanMs totalMs=${System.currentTimeMillis() - t0}",
+            )
             runOnUiThread {
                 rows = loaded
                 applyFilter()
+                lastUsedPrefetchPkg?.let { pkg ->
+                    loaded.firstOrNull { it.pkg == pkg }?.let {
+                        lastUsedPrefetch = it
+                    }
+                }
                 setAppsLoading(false)
                 if (toastWhenDone) {
                     Toast.makeText(this, R.string.apps_refreshed, Toast.LENGTH_SHORT).show()
@@ -324,6 +514,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showActions(row: AppRow) {
+        if (!canShowUi()) {
+            DiagLog.w("ui", "skip showActions pkg=${row.pkg} (activity not started)")
+            return
+        }
         if (row.blocked) {
             AlertDialog.Builder(this)
                 .setTitle(row.label)
@@ -394,6 +588,9 @@ class MainActivity : AppCompatActivity() {
     private fun applyOptimistic(pkg: String, rule: AppRule, mode: Mode) {
         EnterSendService.instance?.store?.putLocal(rule)
         rows = rows?.map { if (it.pkg == pkg) it.withRule(rule, mode) else it }
+        lastUsedPrefetch?.takeIf { it.pkg == pkg }?.let {
+            lastUsedPrefetch = it.withRule(rule, mode)
+        }
         applyFilter()
     }
 

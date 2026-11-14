@@ -101,6 +101,13 @@
     <string name="home_title">Status</string>
     <string name="home_subtitle">Enter sends in chat. Shift+Enter starts a new line.</string>
     <string name="home_manage_apps">Manage apps</string>
+    <string name="last_used_title">Last used app</string>
+    <string name="last_used_empty">No recent app yet. Open a chat app with EnterSend on.</string>
+    <string name="last_used_cd">Last used app: %1$s. Opens app settings.</string>
+    <string name="exclude_from_recent">Exclude from recent</string>
+    <string name="exclude_from_recent_blurb">Checked apps never appear on the Home last-used card.</string>
+    <string name="exclude_from_recent_search">Search apps</string>
+    <string name="exclude_from_recent_empty">No user apps installed.</string>
     <string name="status_on_title">EnterSend is on</string>
     <string name="status_on_body">Physical Enter will send in taught and auto-detected chat apps.</string>
     <string name="status_off_title">EnterSend is off</string>
@@ -129,6 +136,11 @@
     <string name="action_enable_default_enter">Enable with default Enter</string>
     <string name="action_ask_again">Ask again on open</string>
     <string name="diagnostics_open">Diagnostics</string>
+    <string name="diagnostics_section">Diagnostics</string>
+    <string name="share_diag_logs">Share logs</string>
+    <string name="clear_diag_logs">Clear logs</string>
+    <string name="diag_logs_cleared">Diagnostic logs cleared</string>
+    <string name="diag_logs_subject">EnterSend diagnostic logs</string>
     <string name="diagnostics_title">Prompt log</string>
     <string name="diagnostics_blurb">Last ~100 prompt and Enter decisions. Copy or share this if a teach prompt is missing or Enter does not send.</string>
     <string name="diagnostics_copy">Copy</string>

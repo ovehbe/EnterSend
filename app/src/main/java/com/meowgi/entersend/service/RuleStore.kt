@@ -5,6 +5,7 @@ import com.meowgi.entersend.data.AppRule
 import com.meowgi.entersend.data.Crops
 import com.meowgi.entersend.data.Mode
 import com.meowgi.entersend.data.RuleDao
+import com.meowgi.entersend.diag.DiagLog
 import java.util.concurrent.Executor
 
 /**
@@ -75,10 +76,12 @@ class RuleStore(
      */
     fun preloadAll() {
         io.execute {
+            val t0 = System.currentTimeMillis()
             val rules = dao.all()
             val states = rules.map { rule ->
                 AppState(rule, rule.cropPath?.let(crops::load))
             }
+            DiagLog.i("db", "preloadAll rules=${rules.size} ${System.currentTimeMillis() - t0}ms")
             main.execute {
                 for (state in states) {
                     val pkg = state.rule.packageName
@@ -112,9 +115,11 @@ class RuleStore(
         generation[pkg] = gen
         loading.add(pkg)
         io.execute {
+            val t0 = System.currentTimeMillis()
             val fromDb = dao.get(pkg)
             val rule = fromDb ?: AppRule(pkg)
             val crop = rule.cropPath?.let(crops::load)
+            DiagLog.i("db", "refresh $pkg hit=${fromDb != null} ${System.currentTimeMillis() - t0}ms")
             main.execute {
                 if (generation[pkg] != gen) return@execute
                 loading.remove(pkg)

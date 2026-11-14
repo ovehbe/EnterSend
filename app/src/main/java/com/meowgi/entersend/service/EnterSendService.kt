@@ -20,7 +20,10 @@ import com.meowgi.entersend.core.KeyGate
 import com.meowgi.entersend.core.SystemAppPolicy
 import com.meowgi.entersend.data.CropFiles
 import com.meowgi.entersend.data.EnterDiagLog
+import com.meowgi.entersend.data.LastUsed
 import com.meowgi.entersend.data.PromptDecisionLog
+import com.meowgi.entersend.diag.CrashHandler
+import com.meowgi.entersend.diag.DiagLog
 import java.time.LocalDate
 
 class EnterSendService : AccessibilityService() {
@@ -55,6 +58,9 @@ class EnterSendService : AccessibilityService() {
     internal var rootPackageForTest: String? = null
 
     override fun onServiceConnected() {
+        CrashHandler.install(this)
+        DiagLog.init(this)
+        DiagLog.i("service", "onServiceConnected")
         // Drop any leftover teach overlay from a previous connection.
         teach?.forceClose()
         chooser?.hide()
@@ -107,6 +113,7 @@ class EnterSendService : AccessibilityService() {
     }
 
     private fun stopped() {
+        DiagLog.i("service", "stopped")
         main.removeCallbacks(usagePoll)
         unregisterScreenOn()
         chooser?.hide()
@@ -298,9 +305,15 @@ class EnterSendService : AccessibilityService() {
             notifier?.onPackageLeft(previous)
         }
         lastWindowPkg = pkg
+        DiagLog.i("fg", "pkg=$pkg source=$source prev=$previous")
         // Prompt path only — never feeds EnterHandler's package selection.
         store?.onForeground(pkg)
         store?.get(pkg)?.let { notifier?.onAppSeen(pkg, it.rule, source = source) }
+        // Home "Last used" card — eligible non-system packages only (no Usage Access required).
+        try {
+            LastUsed.recordForeground(this, pkg, policy ?: SystemAppPolicy(this))
+        } catch (_: Exception) {
+        }
     }
 
     private fun resolveForeground(eventPkg: String?): ForegroundPackage.Resolved? {
@@ -393,7 +406,9 @@ class EnterSendService : AccessibilityService() {
         else -> "a11y"
     }
 
-    override fun onInterrupt() = Unit
+    override fun onInterrupt() {
+        DiagLog.w("service", "onInterrupt")
+    }
 
     companion object {
         var instance: EnterSendService? = null

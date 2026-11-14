@@ -71,11 +71,16 @@ class AppRow(
 }
 
 object AppRows {
+    /** Test hook: increments on every full [load] (not [loadOne]). */
+    @Volatile
+    var fullLoadCountForTests: Int = 0
+
     /**
      * Launchable apps plus apps with a saved rule. Touches the package manager; call off the
      * main thread. Exact 0.3.3 listing path — do not change the query or isSystem semantics.
      */
     fun load(context: Context, rules: List<AppRule>, policy: SystemAppPolicy = SystemAppPolicy(context)): List<AppRow> {
+        fullLoadCountForTests++
         val pm = context.packageManager
         val byPkg = rules.associateBy { it.packageName }
         val launchable = pm.queryIntentActivities(
@@ -83,22 +88,50 @@ object AppRows {
             0,
         ).map { it.activityInfo.packageName }
         return (launchable + byPkg.keys).distinct().filter { it != context.packageName }.map { pkg ->
-            val info = try {
-                pm.getPackageInfo(pkg, 0)
-            } catch (_: PackageManager.NameNotFoundException) {
-                null
-            }
-            val rule = byPkg[pkg] ?: AppRule(pkg)
-            AppRow(
-                pkg = pkg,
-                label = info?.applicationInfo?.loadLabel(pm)?.toString() ?: pkg,
-                icon = info?.applicationInfo?.loadIcon(pm),
-                rule = rule,
-                versionCode = info?.longVersionCode,
-                mode = policy.resolveMode(rule),
-                isSystemApp = policy.isSystemApp(pkg),
-            )
+            rowFor(pm, pkg, byPkg[pkg] ?: AppRule(pkg), policy)
         }
+    }
+
+    /**
+     * Single-package row for the Home last-used card (and similar). One PackageManager
+     * lookup — never scans the full launcher list.
+     */
+    fun loadOne(
+        context: Context,
+        pkg: String,
+        rule: AppRule = AppRule(pkg),
+        policy: SystemAppPolicy = SystemAppPolicy(context),
+    ): AppRow? {
+        if (pkg == context.packageName) return null
+        val pm = context.packageManager
+        return try {
+            pm.getPackageInfo(pkg, 0)
+            rowFor(pm, pkg, rule, policy)
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+    }
+
+    private fun rowFor(
+        pm: PackageManager,
+        pkg: String,
+        rule: AppRule,
+        policy: SystemAppPolicy,
+    ): AppRow {
+        val info = try {
+            pm.getPackageInfo(pkg, 0)
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+        return AppRow(
+            pkg = pkg,
+            label = info?.applicationInfo?.loadLabel(pm)?.toString() ?: pkg,
+            icon = info?.applicationInfo?.loadIcon(pm),
+            rule = rule,
+            versionCode = info?.longVersionCode,
+            mode = policy.resolveMode(rule),
+            isSystemApp = policy.isSystemApp(pkg),
+        )
     }
 
     /**
