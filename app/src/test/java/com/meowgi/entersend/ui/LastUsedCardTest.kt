@@ -7,6 +7,8 @@ import android.content.pm.PackageInfo
 import android.content.pm.ResolveInfo
 import android.os.Looper
 import android.view.View
+import android.widget.EditText
+import android.widget.ListView
 import android.widget.TextView
 import com.meowgi.entersend.EnterSendApp
 import com.meowgi.entersend.R
@@ -14,6 +16,7 @@ import com.meowgi.entersend.context
 import com.meowgi.entersend.data.LastUsedPrefs
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -30,6 +33,7 @@ class LastUsedCardTest {
 
     @Before fun setUp() {
         install("com.whatsapp", "WhatsApp")
+        install("org.telegram.messenger", "Telegram")
         MainActivity.prefs(app).edit().putBoolean(MainActivity.KEY_SETUP_DONE, true).apply()
         LastUsedPrefs.setLastPackage(app, null)
         LastUsedPrefs.setExcluded(app, emptySet())
@@ -102,9 +106,44 @@ class LastUsedCardTest {
     @Test fun excludeListPersistsCheckbox() {
         val a = Robolectric.buildActivity(ExcludeRecentActivity::class.java).setup().visible().get()
         settle()
-        val list = a.findViewById<android.widget.ListView>(R.id.exclude_list)
+        val list = a.findViewById<ListView>(R.id.exclude_list)
         assertTrue(list.adapter.count >= 1)
-        list.performItemClick(list.getChildAt(0) ?: list, 0, 0)
+        // Alphabetical: Telegram then WhatsApp — click WhatsApp by label search of full list.
+        val whatsIdx = (0 until list.adapter.count).first {
+            (list.adapter.getItem(it) as ExcludeRecentActivity.Entry).pkg == "com.whatsapp"
+        }
+        list.performItemClick(list.getChildAt(whatsIdx) ?: list, whatsIdx, 0)
         assertTrue(LastUsedPrefs.isExcluded(app, "com.whatsapp"))
+        assertFalse(LastUsedPrefs.isExcluded(app, "org.telegram.messenger"))
+    }
+
+    @Test fun excludeSearchFiltersAndSavesCorrectPackageWhileFiltered() {
+        val a = Robolectric.buildActivity(ExcludeRecentActivity::class.java).setup().visible().get()
+        settle()
+        val list = a.findViewById<ListView>(R.id.exclude_list)
+        assertEquals(2, list.adapter.count)
+
+        a.findViewById<EditText>(R.id.exclude_search).setText("tele")
+        settle()
+        assertEquals(1, list.adapter.count)
+        val shown = list.adapter.getItem(0) as ExcludeRecentActivity.Entry
+        assertEquals("org.telegram.messenger", shown.pkg)
+        assertEquals("Telegram", shown.label)
+
+        list.performItemClick(list.getChildAt(0) ?: list, 0, 0)
+        assertTrue(LastUsedPrefs.isExcluded(app, "org.telegram.messenger"))
+        assertFalse(LastUsedPrefs.isExcluded(app, "com.whatsapp"))
+
+        // Package-name match also works; checkbox state survives filter clear.
+        a.findViewById<EditText>(R.id.exclude_search).setText("whatsapp")
+        settle()
+        assertEquals(1, list.adapter.count)
+        assertEquals("com.whatsapp", (list.adapter.getItem(0) as ExcludeRecentActivity.Entry).pkg)
+
+        a.findViewById<EditText>(R.id.exclude_search).setText("")
+        settle()
+        assertEquals(2, list.adapter.count)
+        assertTrue(LastUsedPrefs.isExcluded(app, "org.telegram.messenger"))
+        assertFalse(LastUsedPrefs.isExcluded(app, "com.whatsapp"))
     }
 }

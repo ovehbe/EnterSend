@@ -106,6 +106,7 @@
     <string name="last_used_cd">Last used app: %1$s. Opens app settings.</string>
     <string name="exclude_from_recent">Exclude from recent</string>
     <string name="exclude_from_recent_blurb">Checked apps never appear on the Home last-used card.</string>
+    <string name="exclude_from_recent_search">Search apps</string>
     <string name="exclude_from_recent_empty">No user apps installed.</string>
     <string name="status_on_title">EnterSend is on</string>
     <string name="status_on_body">Physical Enter will send in taught and auto-detected chat apps.</string>
