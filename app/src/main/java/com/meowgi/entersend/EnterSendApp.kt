@@ -20,6 +20,14 @@ class EnterSendApp : Application() {
     /** Single background thread for every database and file access. */
     val io: ExecutorService = Executors.newSingleThreadExecutor()
 
+    /**
+     * Lightweight work that must not wait behind [io] (e.g. last-used card prefetch /
+     * single-package AppRow). Full AppRows.load and DB cleanup stay on [io].
+     */
+    val quick: ExecutorService = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "EnterSend-quick").apply { isDaemon = true }
+    }
+
     override fun onCreate() {
         super.onCreate()
         CrashHandler.install(this)

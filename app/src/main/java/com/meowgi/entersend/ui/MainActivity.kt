@@ -64,6 +64,9 @@ class MainActivity : AppCompatActivity() {
     private val policy by lazy { SystemAppPolicy(this) }
     /** Bumped in [onStop] so late async UI posts drop instead of showing dialogs. */
     private val uiGeneration = AtomicInteger(0)
+    /** Prefetched last-used [AppRow] so card tap can open the sheet synchronously. */
+    private var lastUsedPrefetch: AppRow? = null
+    private var lastUsedPrefetchPkg: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -336,6 +339,8 @@ class MainActivity : AppCompatActivity() {
         if (pkg == null) {
             card.visibility = View.GONE
             empty.visibility = View.VISIBLE
+            lastUsedPrefetch = null
+            lastUsedPrefetchPkg = null
             DiagLog.i("lastused", "card empty")
             return
         }
@@ -356,11 +361,46 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageView>(R.id.last_used_icon).setImageDrawable(icon)
         card.contentDescription = getString(R.string.last_used_cd, label)
         DiagLog.i("lastused", "card pkg=$pkg label=$label")
+        prefetchLastUsedRow(pkg)
+    }
+
+    /** Warm [lastUsedPrefetch] so the next card tap can open the sheet with no wait. */
+    private fun prefetchLastUsedRow(pkg: String) {
+        rows?.firstOrNull { it.pkg == pkg }?.let {
+            lastUsedPrefetch = it
+            lastUsedPrefetchPkg = pkg
+            DiagLog.i("lastused", "prefetch from rows pkg=$pkg")
+            return
+        }
+        if (lastUsedPrefetchPkg == pkg && lastUsedPrefetch != null) return
+        lastUsedPrefetchPkg = pkg
+        val gen = uiGeneration.get()
+        // Never use app.io — full AppRows.load on that queue would delay the card sheet.
+        app.quick.execute {
+            val row = loadOneRow(pkg)
+            runOnUiThread {
+                if (gen != uiGeneration.get()) return@runOnUiThread
+                if (lastUsedPrefetchPkg != pkg) return@runOnUiThread
+                lastUsedPrefetch = row
+                DiagLog.i("lastused", "prefetch ready pkg=$pkg hit=${row != null}")
+            }
+        }
+    }
+
+    /**
+     * Single-package row for the card. Uses RuleStore memory when live; does **not** hit Room
+     * on [EnterSendApp.quick] (avoids blocking behind / contending with [EnterSendApp.io] DB work).
+     * Prefetch is refreshed from [rows] once the full Apps load completes.
+     */
+    private fun loadOneRow(pkg: String): AppRow? {
+        val rule = EnterSendService.instance?.store?.get(pkg)?.rule ?: AppRule(pkg)
+        return AppRows.loadOne(this, pkg, rule, policy)
     }
 
     /**
      * Same per-app sheet as tapping a row on the Apps page. Reuses [showActions].
-     * Uses the cached Apps list when available; otherwise builds a single [AppRow] (no full scan).
+     * Prefers the prefetched / rows-cached [AppRow] for an instant sheet; otherwise a
+     * single-package load on [EnterSendApp.quick] (never behind the full Apps scan).
      */
     private fun showActionsForPackage(pkg: String) {
         val t0 = System.currentTimeMillis()
@@ -378,8 +418,14 @@ class MainActivity : AppCompatActivity() {
                 DiagLog.w("lastused", "sheet missing pkg=$pkg ms=${System.currentTimeMillis() - t0}")
             }
         }
+        lastUsedPrefetch?.takeIf { it.pkg == pkg }?.let {
+            present(it)
+            return
+        }
         val cached = rows?.firstOrNull { it.pkg == pkg }
         if (cached != null) {
+            lastUsedPrefetch = cached
+            lastUsedPrefetchPkg = pkg
             present(cached)
             return
         }
@@ -389,14 +435,16 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val gen = uiGeneration.get()
-        app.io.execute {
-            val fromStore = EnterSendService.instance?.store?.get(pkg)?.rule
-            val rule = fromStore ?: app.db.rules().get(pkg) ?: AppRule(pkg)
-            val row = AppRows.loadOne(this, pkg, rule, policy)
+        app.quick.execute {
+            val row = loadOneRow(pkg)
             runOnUiThread {
                 if (gen != uiGeneration.get() || !canShowUi()) {
                     DiagLog.w("ui", "drop stale card sheet pkg=$pkg gen=$gen now=${uiGeneration.get()}")
                     return@runOnUiThread
+                }
+                if (row != null) {
+                    lastUsedPrefetch = row
+                    lastUsedPrefetchPkg = pkg
                 }
                 present(row)
             }
@@ -434,6 +482,11 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 rows = loaded
                 applyFilter()
+                lastUsedPrefetchPkg?.let { pkg ->
+                    loaded.firstOrNull { it.pkg == pkg }?.let {
+                        lastUsedPrefetch = it
+                    }
+                }
                 setAppsLoading(false)
                 if (toastWhenDone) {
                     Toast.makeText(this, R.string.apps_refreshed, Toast.LENGTH_SHORT).show()
@@ -535,6 +588,9 @@ class MainActivity : AppCompatActivity() {
     private fun applyOptimistic(pkg: String, rule: AppRule, mode: Mode) {
         EnterSendService.instance?.store?.putLocal(rule)
         rows = rows?.map { if (it.pkg == pkg) it.withRule(rule, mode) else it }
+        lastUsedPrefetch?.takeIf { it.pkg == pkg }?.let {
+            lastUsedPrefetch = it.withRule(rule, mode)
+        }
         applyFilter()
     }
 

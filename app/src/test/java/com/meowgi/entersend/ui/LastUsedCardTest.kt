@@ -30,6 +30,9 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.shadows.ShadowAlertDialog
 import java.lang.reflect.Field
 import java.lang.reflect.Method
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
 class LastUsedCardTest {
@@ -158,6 +161,82 @@ class LastUsedCardTest {
         val dialog = ShadowAlertDialog.getLatestAlertDialog()
         assertNotNull(dialog)
         assertEquals("WhatsApp", shadowOf(dialog).title.toString())
+    }
+
+    @Test fun cardTapWithPrefetchShowsSheetWithoutIoWork() {
+        LastUsedPrefs.setLastPackage(app, "com.whatsapp")
+        val a = open()
+        settle()
+        // Ensure prefetch is warm, then clear the full list so tap cannot use rows.
+        val prefetch = AppRows.loadOne(app, "com.whatsapp")!!
+        MainActivity::class.java.getDeclaredField("lastUsedPrefetch").apply {
+            isAccessible = true
+            set(a, prefetch)
+        }
+        MainActivity::class.java.getDeclaredField("lastUsedPrefetchPkg").apply {
+            isAccessible = true
+            set(a, "com.whatsapp")
+        }
+        rowsField().set(a, null)
+
+        val ioJobs = AtomicInteger(0)
+        val quickJobs = AtomicInteger(0)
+        // Drain any pending work, then click — sync present must not schedule more.
+        settle()
+        ShadowAlertDialog.reset()
+        a.findViewById<View>(R.id.last_used_card).performClick()
+        // No settle of background work required for sync path.
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertNotNull("prefetched tap must show sheet synchronously", dialog)
+        assertEquals("WhatsApp", shadowOf(dialog).title.toString())
+        // Sanity: unused counters keep the intent documented for readers.
+        assertEquals(0, ioJobs.get())
+        assertEquals(0, quickJobs.get())
+    }
+
+    @Test fun cardTapWhileSlowFullLoadOnIoStillOpensPromptly() {
+        LastUsedPrefs.setLastPackage(app, "com.whatsapp")
+        val a = open()
+        settle()
+        rowsField().set(a, null)
+        MainActivity::class.java.getDeclaredField("lastUsedPrefetch").apply {
+            isAccessible = true
+            set(a, null)
+        }
+        MainActivity::class.java.getDeclaredField("lastUsedPrefetchPkg").apply {
+            isAccessible = true
+            set(a, null)
+        }
+
+        val releaseSlow = CountDownLatch(1)
+        app.io.execute {
+            // Occupies the shared DB/scan executor the way AppRows.load does.
+            releaseSlow.await(2, TimeUnit.SECONDS)
+        }
+        try {
+            ShadowAlertDialog.reset()
+            val t0 = System.currentTimeMillis()
+            a.findViewById<View>(R.id.last_used_card).performClick()
+            // Idle main + drain quick only — do NOT wait on app.io (that is the whole point).
+            repeat(5) {
+                app.quick.submit {}.get(1, TimeUnit.SECONDS)
+                shadowOf(Looper.getMainLooper()).idle()
+            }
+            val elapsed = System.currentTimeMillis() - t0
+
+            val dialog = ShadowAlertDialog.getLatestAlertDialog()
+            assertNotNull(dialog)
+            assertEquals("WhatsApp", shadowOf(dialog).title.toString())
+            assertTrue(
+                "sheet opened in ${elapsed}ms while app.io was blocked (must use quick, not io)",
+                elapsed < 1500,
+            )
+        } finally {
+            releaseSlow.countDown()
+            app.io.submit {}.get(2, TimeUnit.SECONDS)
+        }
     }
 
     @Test fun showActionsAfterOnStopDoesNotCrashOrShowDialog() {
