@@ -172,7 +172,7 @@ class LastUsedTest {
     }
 
     @Test fun versionIs0319() {
-        assertEquals("0.3.19", BuildConfig.VERSION_NAME)
-        assertEquals(26, BuildConfig.VERSION_CODE)
+        assertEquals("0.3.20", BuildConfig.VERSION_NAME)
+        assertEquals(27, BuildConfig.VERSION_CODE)
     }
 }
