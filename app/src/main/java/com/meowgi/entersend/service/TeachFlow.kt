@@ -41,6 +41,12 @@ class TeachFlow(
     private val promoteToken = Any()
     /** Step 1: compose box was non-empty at least once this session (for empty-after-send evidence). */
     private var step1SawText = false
+    /**
+     * View.performClick runs the app's onClick (which empties the box) before it sends
+     * TYPE_VIEW_CLICKED, so the send click lands just after step 2 starts. Until this uptime a
+     * usable click still counts as the step-1 send.
+     */
+    private var lateSendClickUntil = 0L
 
     val isTeaching: Boolean
         get() = state is Listening || state is RetryBar || state is Capturing || state is Confirming
@@ -69,8 +75,9 @@ class TeachFlow(
         armSafetyTimeout(pkg)
     }
 
+    /** Automatic offer after an Enter miss. Taught apps are only re-taught via [startTeaching]. */
     fun offer(rule: AppRule) {
-        if (rule.teachDeclined || rule.lastAskedDay == today()) return
+        if (rule.isTaught || rule.teachDeclined || rule.lastAskedDay == today()) return
         if (state !is Idle) resetSession()
         startTeaching(rule.packageName)
         store.markAsked(rule.packageName, today())
@@ -117,7 +124,11 @@ class TeachFlow(
                     enterStep2(pkg)
                 }
             }
-            is RetryBar -> promoteCaptureIfReady(s.pkg)
+            is RetryBar -> {
+                val late = s.pkg == pkg && !node.editable &&
+                    android.os.SystemClock.uptimeMillis() <= lateSendClickUntil
+                if (late && usableSend(node)) saveNodeRule(pkg, node) else promoteCaptureIfReady(s.pkg)
+            }
             is Capturing -> Unit
             else -> Unit
         }
@@ -189,6 +200,7 @@ class TeachFlow(
         clearTimeouts()
         state = Idle
         step1SawText = false
+        lateSendClickUntil = 0L
         overlay.setTapListener(null)
         overlay.hide()
     }
@@ -200,7 +212,12 @@ class TeachFlow(
         val field = device.focusedField()?.takeIf { it.packageName == pkg }
         when {
             field != null && field.text.isNotBlank() -> step1SawText = true
-            step1SawText && (field == null || field.text.isBlank()) -> enterStep2(pkg)
+            step1SawText && (field == null || field.text.isBlank()) -> {
+                enterStep2(pkg)
+                if (state is RetryBar) {
+                    lateSendClickUntil = android.os.SystemClock.uptimeMillis() + LATE_SEND_CLICK_MS
+                }
+            }
         }
     }
 
@@ -378,6 +395,7 @@ class TeachFlow(
         const val SAFETY_TIMEOUT_MS = 30_000L
         const val SAVED_MS = 1_500L
         const val PROMOTE_POLL_MS = 150L
+        const val LATE_SEND_CLICK_MS = 1_000L
 
         private val MODIFIERS = setOf(
             KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.KEYCODE_SHIFT_RIGHT,
